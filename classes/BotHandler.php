@@ -81,6 +81,7 @@ class BotHandler
                 return;
             } elseif (str_starts_with($state, 'editing_category_name_')) {
                 $categoryName = trim($this->text);
+                $this->deleteMessage($this->messageId);
                 if (empty($categoryName)) {
                     $this->Alert("نام دسته‌بندی نمی‌تواند خالی باشد.");
                     return;
@@ -93,10 +94,10 @@ class BotHandler
                 $res = DB::table('categories')->update($categoryId, ['name' => $categoryName]);
                 if ($res) {
                     DB::table('users')->update($this->chatId, ['state' => '']);
-                    // ساخت دوباره پیام 
+                    $messageId = $this->getMessageId($this->chatId);
                     $this->sendRequest("editMessageText", [
                         "chat_id" => $this->chatId,
-                        "message_id" => $this->messageId,
+                        "message_id" => $messageId,
                         "text" => "دسته‌بندی با موفقیت ویرایش شد: {$categoryName}",
                         "reply_markup" => [
                             "inline_keyboard" => [
