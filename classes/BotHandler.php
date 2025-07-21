@@ -35,10 +35,19 @@ class BotHandler
         $this->botLink = $config['bot']['bot_link'];
         $this->zarinpalPaymentHandler = new ZarinpalPaymentHandler();
     }
+    public function deleteMessage($messageId, $delay = 0)
+    {
+        if (!$messageId) {
+            return false;
+        }
 
-    /**
-     * متد اصلی برای پردازش پیام‌های ورودی.
-     */
+        $data = [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId
+        ];
+        sleep($delay);
+        $response = $this->sendRequest("deleteMessage", $data);
+    }
     public function handleRequest(): void
     {
         if (isset($this->message["from"])) {
@@ -66,14 +75,16 @@ class BotHandler
                     return;
                 }
                 $res = $this->createNewCategory($categoryName);
+                $messageId = $this->getMessageId($this->chatId);
                 if ($res) {
-                    $this->Alert("دسته‌بندی جدید با موفقیت ایجاد شد.");
+                    $this->deleteMessage($this->messageId);
                     DB::table('users')->update($this->chatId, ['state' => '']);
-                    $messageId = $this->getMessageId($this->chatId);
-
+                 
+                    $this->Alert("دسته‌بندی جدید با موفقیت ایجاد شد.");
                     $this->showAdminMainMenu($messageId ?? null);
                 } else {
                     $this->Alert("خطا در ایجاد دسته‌بندی. لطفاً دوباره تلاش کنید.");
+                    $this->MainMenu($messageId ?? null);
                 }
                 return;
             } else {
@@ -258,10 +269,11 @@ class BotHandler
             ];
             $this->sendRequest("answerCallbackQuery", $data);
         } else {
-            $this->sendRequest("sendMessage", [
+            $res = $this->sendRequest("sendMessage", [
                 "chat_id" => $this->chatId,
                 "text" => $message,
             ]);
+            $this->deleteMessage($res['result']['message_id'] ?? null, 3); 
         }
     }
 
