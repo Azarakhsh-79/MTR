@@ -70,9 +70,8 @@ class BotHandler
                     $this->Alert("دسته‌بندی جدید با موفقیت ایجاد شد.");
                     DB::table('users')->update($this->chatId, ['state' => '']);
                     $messageId = $this->getMessageId($this->chatId);
-                   
-                    $this->showAdminMainMenu($messageId ?? null);
 
+                    $this->showAdminMainMenu($messageId ?? null);
                 } else {
                     $this->Alert("خطا در ایجاد دسته‌بندی. لطفاً دوباره تلاش کنید.");
                 }
@@ -109,21 +108,22 @@ class BotHandler
                 $this->showAdminMainMenu($messageId);
                 return;
             } elseif ($callbackData === 'admin_manage_categories') {
-                $this->showCategoryManagementMenu( $messageId);
+                $this->showCategoryManagementMenu($messageId);
                 return;
             } elseif ($callbackData === 'admin_add_category') {
                 DB::table('users')->update($this->chatId, ['state' => 'adding_category_name']);
-                $res = $this->sendRequest("sendMessage", [
+                $res = $this->sendRequest("editMessageText", [
                     "chat_id" => $this->chatId,
+                    "message_id" => $messageId,
                     "text" => "لطفاً نام دسته‌بندی جدید را وارد کنید:",
-                    "reply_markup" => json_encode([
-                        'inline_keyboard' => [
-                            [['text' => '🔙 بازگشت', 'callback_data' => 'admin_panel_entry']]
+                    "reply_markup" =>
+                    [
+                        "inline_keyboard" => [
+                            [["text" => "🔙 بازگشت", "callback_data" => "admin_panel_entry"]]
                         ]
-                    ])
-
+                    ]
                 ]);
-                $this->saveMessageId( $this->chatId, $res['result']['message_id'] ?? null);
+                $this->saveMessageId($this->chatId, $res['result']['message_id'] ?? null);
             } else {
                 $this->sendRequest("answerCallbackQuery", [
                     "callback_query_id" => $this->callbackQueryId,
@@ -227,7 +227,7 @@ class BotHandler
                 [['text' => '➕ افزودن دسته‌بندی جدید', 'callback_data' => 'admin_add_category']],
                 [['text' => '✏️ ویرایش دسته‌بندی‌ها', 'callback_data' => 'admin_edit_category_list']],
                 [['text' => '🗑 حذف دسته‌بندی', 'callback_data' => 'admin_delete_category_list']],
-                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']]
+                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'main_menu']]
             ]
         ];
 
