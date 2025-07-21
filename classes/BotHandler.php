@@ -79,7 +79,16 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['state' => '']);
                 $this->MainMenu();
                 return;
-            } elseif (str_starts_with($state, 'editing_category_name_')) {
+            }
+
+            $state = $user['state'] ?? '';
+
+            if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_price', 'adding_product_photo'])) {
+                $this->handleProductCreationSteps();
+                return;
+            }
+
+            if (str_starts_with($state, 'editing_category_name_')) {
                 $categoryName = trim($this->text);
                 $this->deleteMessage($this->messageId);
                 if (empty($categoryName)) {
@@ -115,10 +124,7 @@ class BotHandler
             } elseif ($state === "adding_category_name") {
                 $categoryName = trim($this->text);
                 if (empty($categoryName)) {
-                    $this->sendRequest("sendMessage", [
-                        "chat_id" => $this->chatId,
-                        "text" => "نام دسته‌بندی نمی‌تواند خالی باشد."
-                    ]);
+                    $this->Alert("نام دسته‌بندی نمی‌تواند خالی باشد.");
                     return;
                 }
                 $res = $this->createNewCategory($categoryName);
@@ -177,7 +183,6 @@ class BotHandler
                     "callback_query_id" => $this->callbackQueryId,
                     "text" => "دسته‌بندی با ID {$categoryId} انتخاب شد."
                 ]);
-
             } elseif (strpos($callbackData, 'admin_edit_category_') === 0) {
                 $categoryId = str_replace('admin_edit_category_', '', $callbackData);
                 $category = DB::table('categories')->findById($categoryId);
@@ -204,7 +209,7 @@ class BotHandler
                 if (!$category) {
                     $this->alert("دسته‌بندی یافت نشد.");
                     return;
-                } 
+                }
                 $res = DB::table('categories')->delete($categoryId);
                 if ($res) {
                     $this->Alert("دسته‌بندی با موفقیت حذف شد.");
@@ -212,13 +217,38 @@ class BotHandler
                 } else {
                     $this->Alert("خطا در حذف دسته‌بندی. لطفاً دوباره تلاش کنید.");
                 }
+            }
+            if (strpos($callbackData, 'product_cat_select_') === 0) {
+                $categoryId = (int)str_replace('product_cat_select_', '', $callbackData);
+
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'adding_product_name',
+                    'state_data' => json_encode(['category_id' => $categoryId])
+                ]);
+
+                $res = $this->sendRequest("editMessageText", [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ دسته‌بندی انتخاب شد.\n\nحالا لطفاً نام محصول را وارد کنید:",
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                    ]
+                ]);
+                $this->saveMessageId($this->chatId, $res['result']['message_id'] ?? null);
+                return;
             } elseif ($callbackData === 'admin_manage_products') {
-                $this->Alert("این بخش هنوز آماده نیست.");
+                $this->showProductManagementMenu($messageId);
+            } elseif ($callbackData === 'admin_add_product') {
+                $this->promptForProductCategory($messageId);
+            } elseif ($callbackData === 'admin_product_list') {
+                $this->showProductList($messageId);
+            } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
+                $productId = str_replace('admin_edit_product_', '', $callbackData);
             } elseif ($callbackData === 'admin_bot_settings') {
                 $this->Alert("این بخش هنوز آماده نیست.");
             } elseif ($callbackData === 'admin_reports') {
                 $this->Alert("این بخش هنوز آماده نیست.");
-                
             } elseif ($callbackData === 'admin_add_category') {
                 DB::table('users')->update($this->chatId, ['state' => 'adding_category_name']);
                 $res = $this->sendRequest("editMessageText", [
@@ -566,5 +596,256 @@ class BotHandler
             Logger::log('error', 'getMessageId failed', 'Message ID not found for Chat ID', ['chat_id' => $chatId]);
             return null;
         }
+    }
+
+    public function showProductManagementMenu($messageId = null): void
+    {
+        $text = "بخش مدیریت محصولات. لطفاً یک گزینه را انتخاب کنید:";
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '➕ افزودن محصول جدید', 'callback_data' => 'admin_add_product']],
+                [['text' => '📜 لیست محصولات', 'callback_data' => 'admin_product_list']],
+                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']]
+            ]
+        ];
+
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                'chat_id' => $this->chatId,
+                'message_id' => $messageId,
+                'text' => $text,
+                'reply_markup' => $keyboard
+            ]);
+        } else {
+            $this->sendRequest("sendMessage", [
+                'chat_id' => $this->chatId,
+                'text' => $text,
+                'reply_markup' => $keyboard
+            ]);
+        }
+    }
+
+
+
+    public function showProductList($messageId = null): void
+    {
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                "chat_id" => $this->chatId,
+                "message_id" => $messageId,
+                "text" => "⏳ در حال ارسال لیست محصولات...",
+                "reply_markup" => ['inline_keyboard' => []]
+            ]);
+        }
+
+        $allProducts = DB::table('products')->all();
+
+        if (empty($allProducts)) {
+            $this->sendRequest("editMessageText", [
+                "chat_id" => $this->chatId,
+                "message_id" => $messageId,
+                "text" => "هیچ محصولی برای نمایش وجود ندارد.",
+                "reply_markup" => [
+                    'inline_keyboard' => [[['text' => '⬅️ بازگشت', 'callback_data' => 'admin_manage_products']]]
+                ]
+            ]);
+            return;
+        }
+
+        $messageIdsToDelete = [$messageId];
+
+        foreach ($allProducts as $product) {
+
+            $productText = "📦 نام محصول: " . $product['name'] . "\n";
+            $productText .= "📝 توضیحات: " . $product['description'] . "\n";
+            $productText .= "💰 قیمت: " . number_format($product['price']) . " تومان";
+
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id']],
+                        ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                    ]
+                ]
+            ];
+
+            $res = $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => $productText,
+                "parse_mode" => "Markdown",
+                "reply_markup" => $keyboard
+            ]);
+            if (isset($res['result']['message_id'])) {
+                $messageIdsToDelete[] = $res['result']['message_id'];
+            }
+        }
+
+        $finalMessage = $this->sendRequest("sendMessage", [
+            "chat_id" => $this->chatId,
+            "text" => "--- پایان لیست محصولات ---",
+            "reply_markup" => [
+                'inline_keyboard' => [[['text' => '⬅️ بازگشت و پاکسازی', 'callback_data' => 'admin_cleanup_products_and_return']]]
+            ]
+        ]);
+        if (isset($finalMessage['result']['message_id'])) {
+            $messageIdsToDelete[] = $finalMessage['result']['message_id'];
+        }
+
+        DB::table('users')->update($this->chatId, ['product_messages_to_delete' => $messageIdsToDelete]);
+    }
+
+    public function promptForProductCategory($messageId = null): void
+    {
+        $allCategories = DB::table('categories')->all();
+        if (empty($allCategories)) {
+            $this->Alert(message: "ابتدا باید حداقل یک دسته‌بندی ایجاد کنید!");
+            $this->showProductManagementMenu($messageId);
+            return;
+        }
+        $categoryButtons = [];
+        foreach ($allCategories as $category) {
+            $categoryButtons[] = [['text' => $category['name'], 'callback_data' => 'product_cat_select_' . $category['id']]];
+        }
+        $categoryButtons[] = [['text' => '❌ انصراف و بازگشت', 'callback_data' => 'admin_manage_products']];
+
+        $keyboard = ['inline_keyboard' => $categoryButtons];
+        $text = "لطفاً دسته‌بندی محصول جدید را انتخاب کنید:";
+
+        DB::table('users')->update($this->chatId, [
+            'state' => 'adding_product_category',
+            'state_data' => json_encode([])
+        ]);
+
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                'chat_id' => $this->chatId,
+                'message_id' => $messageId,
+                'text' => $text,
+                'reply_markup' => $keyboard
+            ]);
+        } else {
+            $this->sendRequest("sendMessage", [
+                'chat_id' => $this->chatId,
+                'text' => $text,
+                'reply_markup' => $keyboard
+            ]);
+        }
+    }
+    
+    private function handleProductCreationSteps(): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        $state = $user['state'] ?? null;
+        $stateData = json_decode( $user['state_data'] ?? '{}', true);
+        $messageId = $this->getMessageId($this->chatId);
+        switch ($state) {
+            // --- مرحله ۱: پرسیدن نام محصول ---
+            case 'adding_product_name':
+                $productName = trim($this->text);
+                $this->deleteMessage($this->messageId);
+                if (empty($productName)) {
+                    $this->Alert("⚠️ نام محصول نمی‌تواند خالی باشد.");
+                    return; 
+                }
+
+                $stateData['name'] = $productName; 
+
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'adding_product_description',
+                    'state_data' => json_encode($stateData)
+                ]);
+
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ نام محصول ثبت شد.\n\nحالا لطفاً توضیحات محصول را وارد کنید :",
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                    ]
+                ]);
+                    
+                break;
+
+            case 'adding_product_description':
+                $stateData['description'] = trim($this->text); 
+                $this->deleteMessage($this->messageId);
+
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'adding_product_price',
+                    'state_data' => json_encode($stateData)
+                ]);
+
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ توضیحات محصول ثبت شد.\n\nحالا لطفاً قیمت محصول را وارد کنید (فقط عدد انگلیسی و به تومان):",
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                    ]
+                ]);
+                break;
+
+            case 'adding_product_price':
+                $price = trim($this->text);
+                
+                if (!is_numeric($price) || $price < 0) {
+                    $this->Alert("⚠️ لطفاً یک قیمت معتبر وارد کنید (فقط عدد انگلیسی).");
+                     return; 
+                }
+
+                $stateData['price'] = (int)$price; 
+
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'adding_product_photo',
+                    'state_data' => json_encode($stateData)
+                ]);
+
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ قیمت محصول ثبت شد.\n\nحالا لطفاً عکس محصول را ارسال کنید (می‌توانید از دستور /skip برای رد کردن این مرحله استفاده کنید):",
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                    ]
+                ]);
+                
+                break;
+
+            case 'adding_product_photo':
+                if (isset($this->message['photo'])) {
+                    $stateData['image_file_id'] = end($this->message['photo'])['file_id'];
+                } elseif ($this->text !== '/skip') {
+                    $this->Alert("⚠️ لطفاً یک عکس محصول ارسال کنید یا از دستور /skip برای رد کردن این مرحله استفاده کنید.");
+                    return;
+                }
+                $this->createNewProduct($stateData);
+
+                DB::table('users')->unsetKey($this->chatId, 'state');
+                DB::table('users')->unsetKey($this->chatId, 'state_data');
+
+                $this->Alert("✅ محصول جدید با موفقیت ایجاد شد!");
+                $this->showProductManagementMenu(); 
+                break;
+        }
+    }
+    private function createNewProduct(array $productData): void
+    {
+        $products = DB::table('products')->all();
+        $newId = empty($products) ? 1 : max(array_keys($products)) + 1;
+
+        $finalProduct = [
+            'id' => $newId,
+            'name' => $productData['name'],
+            'description' => $productData['description'] ?? '',
+            'price' => $productData['price'],
+            'category_id' => $productData['category_id'],
+            'image_file_id' => $productData['image_file_id'] ?? null,
+            'is_active' => true,
+        ];
+
+        DB::table('products')->insert($finalProduct);
     }
 }
