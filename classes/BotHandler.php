@@ -40,25 +40,19 @@ class BotHandler
      */
     public function handleRequest(): void
     {
-        // ۱. اطلاعات کاربر را ذخیره یا به‌روزرسانی می‌کنیم
         if (isset($this->message["from"])) {
             $this->saveOrUpdateUser($this->message["from"]);
         } else {
-            // اگر پیام از طرف کاربر نباشد (مثلا در کانال)، ادامه نمی‌دهیم
             error_log("BotHandler::handleRequest: 'from' field is missing.");
             return;
         }
 
-        // ۲. وضعیت فعلی کاربر را از دیتابیس می‌خوانیم
         $currentUser = DB::table('users')->findById($this->chatId);
-        $state = $currentUser['state'] ?? 'start'; // وضعیت پیش‌فرض 'start' است
+        $state = $currentUser['state'] ?? ''; 
 
         try {
-            // ۳. بر اساس دستور یا وضعیت کاربر، تصمیم‌گیری می‌کنیم
-            if ($this->text === "/start") {
-                // با دستور استارت، وضعیت کاربر را ریست می‌کنیم
-                DB::table('users')->update($this->chatId, ['state' => 'start']);
-
+            if ($this->text === "/start") { 
+                DB::table('users')->update($this->chatId, ['state' => '']);
                 $this->sendRequest("sendMessage", [
                     "chat_id" => $this->chatId,
                     "text" => "به ربات خوش آمدید! برای دیدن دستورات از /help استفاده کنید.",
@@ -77,15 +71,12 @@ class BotHandler
         }
     }
 
-    /**
-     * پردازش دکمه‌های شیشه‌ای (Callback Query).
-     */
+   
     public function handleCallbackQuery($callbackQuery): void
     {
         $chatId = $callbackQuery["message"]["chat"]["id"] ?? null;
         if (!$chatId) return;
 
-        // اطلاعات کاربری که دکمه را زده، ذخیره یا آپدیت می‌کنیم
         if (isset($callbackQuery["from"])) {
             $this->saveOrUpdateUser($callbackQuery["from"]);
         }
@@ -97,13 +88,10 @@ class BotHandler
         // مثال:
         // if ($callbackData === 'show_profile') { ... }
 
-        // پاسخ به تلگرام برای حذف حالت لودینگ دکمه
         $this->sendRequest('answerCallbackQuery', ['callback_query_id' => $callbackQueryId]);
     }
 
-    /**
-     * پردازش درخواست پیش از پرداخت.
-     */
+    
     public function handlePreCheckoutQuery($update): void
     {
         if (isset($update['pre_checkout_query'])) {
@@ -117,9 +105,7 @@ class BotHandler
         }
     }
 
-    /**
-     * پردازش پرداخت موفق.
-     */
+    
     public function handleSuccessfulPayment($update): void
     {
         if (isset($update['message']['successful_payment'])) {
@@ -134,10 +120,6 @@ class BotHandler
         }
     }
 
-    /**
-     * متد کمکی مرکزی برای ذخیره یا آپدیت اطلاعات کاربر در فایل users.json.
-     * @param array $userFromTelegram آرایه اطلاعات کاربر از طرف تلگرام.
-     */
     private function saveOrUpdateUser(array $userFromTelegram): void
     {
         $chatId = $userFromTelegram['id'];
