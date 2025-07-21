@@ -4,17 +4,19 @@ namespace Bot;
 
 use Config\AppConfig;
 use Payment\ZarinpalPaymentHandler;
-use React\EventLoop\Loop;
-use Config\jdf;
+use Bot\DB;     // <-- استفاده از مدیر دیتابیس جدید
+use Bot\Logger; // <-- اطمینان از وجود کلاس لاگر
 
+/**
+ * کلاس اصلی برای مدیریت منطق ربات تلگرام.
+ * این کلاس تمام درخواست‌ها، پیام‌ها و کالبک‌ها را مدیریت می‌کند.
+ */
 class BotHandler
 {
     private $chatId;
     private $text;
     private $messageId;
     private $message;
-    public $db;
-    private $fileHandler;
     private $zarinpalPaymentHandler;
     private $botToken;
     private $botLink;
@@ -25,121 +27,143 @@ class BotHandler
         $this->text = $text;
         $this->messageId = $messageId;
         $this->message = $message;
-        $this->db = new Database();
-        $this->fileHandler = new FileHandler();
+
+        // سازنده بسیار تمیز شده و فقط تنظیمات اصلی را مقداردهی می‌کند
         $config = AppConfig::getConfig();
         $this->botToken = $config['bot']['token'];
         $this->botLink = $config['bot']['bot_link'];
         $this->zarinpalPaymentHandler = new ZarinpalPaymentHandler();
     }
 
-    public function deleteMessageWithDelay(): void
+    /**
+     * متد اصلی برای پردازش پیام‌های ورودی.
+     */
+    public function handleRequest(): void
     {
-        $this->sendRequest("deleteMessage", [
-            "chat_id" => $this->chatId,
-            "message_id" => $this->messageId
-        ]);
-    }
+        // ۱. اطلاعات کاربر را ذخیره یا به‌روزرسانی می‌کنیم
+        if (isset($this->message["from"])) {
+            $this->saveOrUpdateUser($this->message["from"]);
+        } else {
+            // اگر پیام از طرف کاربر نباشد (مثلا در کانال)، ادامه نمی‌دهیم
+            error_log("BotHandler::handleRequest: 'from' field is missing.");
+            return;
+        }
 
-    public function handleSuccessfulPayment($update): void
-    {
-        $userLanguage = $this->db->getUserLanguage($this->chatId);
-        if (isset($update['message']['successful_payment'])) {
-            $chatId = $update['message']['chat']['id'];
-            $payload = $update['message']['successful_payment']['invoice_payload'];
-            $successfulPayment = $update['message']['successful_payment'];
+        // ۲. وضعیت فعلی کاربر را از دیتابیس می‌خوانیم
+        $currentUser = DB::table('users')->findById($this->chatId);
+        $state = $currentUser['state'] ?? 'start'; // وضعیت پیش‌فرض 'start' است
+
+        try {
+            // ۳. بر اساس دستور یا وضعیت کاربر، تصمیم‌گیری می‌کنیم
+            if ($this->text === "/start") {
+                // با دستور استارت، وضعیت کاربر را ریست می‌کنیم
+                DB::table('users')->update($this->chatId, ['state' => 'start']);
+
+                $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => "به ربات خوش آمدید! برای دیدن دستورات از /help استفاده کنید.",
+                ]);
+            } elseif ($state === "awaiting_name") {
+                // مثالی برای مدیریت یک وضعیت خاص
+                // ...
+            } else {
+                $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => "دستور نامشخص است. لطفاً با /start شروع کنید."
+                ]);
+            }
+        } catch (\Throwable $th) {
+            Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);
         }
     }
 
+    /**
+     * پردازش دکمه‌های شیشه‌ای (Callback Query).
+     */
+    public function handleCallbackQuery($callbackQuery): void
+    {
+        $chatId = $callbackQuery["message"]["chat"]["id"] ?? null;
+        if (!$chatId) return;
+
+        // اطلاعات کاربری که دکمه را زده، ذخیره یا آپدیت می‌کنیم
+        if (isset($callbackQuery["from"])) {
+            $this->saveOrUpdateUser($callbackQuery["from"]);
+        }
+
+        $callbackData = $callbackQuery["data"] ?? null;
+        $callbackQueryId = $callbackQuery["id"] ?? null;
+
+        // ... در اینجا منطق مربوط به پردازش دکمه‌های مختلف را پیاده‌سازی کنید ...
+        // مثال:
+        // if ($callbackData === 'show_profile') { ... }
+
+        // پاسخ به تلگرام برای حذف حالت لودینگ دکمه
+        $this->sendRequest('answerCallbackQuery', ['callback_query_id' => $callbackQueryId]);
+    }
+
+    /**
+     * پردازش درخواست پیش از پرداخت.
+     */
     public function handlePreCheckoutQuery($update): void
     {
         if (isset($update['pre_checkout_query'])) {
             $query_id = $update['pre_checkout_query']['id'];
-            file_put_contents('log.txt', date('Y-m-d H:i:s') . " - Received pre_checkout_query: " . print_r($update, true) . "\n", FILE_APPEND);
-            $url = "https://api.telegram.org/bot" . $this->botToken . "/answerPreCheckoutQuery";
-            $post_fields = [
+
+            // به تلگرام اطلاع می‌دهیم که پرداخت معتبر است
+            $this->sendRequest("answerPreCheckoutQuery", [
                 'pre_checkout_query_id' => $query_id,
-                'ok' => true,
-                'error_message' => ""
-            ];
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($post_fields));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-            $response = curl_exec($ch);
-            curl_close($ch);
-            file_put_contents('log.txt', date('Y-m-d H:i:s') . " - answerPreCheckoutQuery Response: " . print_r(json_decode($response, true), true) . "\n", FILE_APPEND);
+                'ok' => true
+            ]);
         }
     }
 
-    public function handleCallbackQuery($callbackQuery): void
+    /**
+     * پردازش پرداخت موفق.
+     */
+    public function handleSuccessfulPayment($update): void
     {
-        $callbackData = $callbackQuery["data"] ?? null;
-        $chatId = $callbackQuery["message"]["chat"]["id"] ?? null;
-        $callbackQueryId = $callbackQuery["id"] ?? null;
-        $messageId = $callbackQuery["message"]["message_id"] ?? null;
-        $currentKeyboard = $callbackQuery["message"]["reply_markup"]["inline_keyboard"] ?? [];
-        $userLanguage = $this->db->getUserLanguage($this->chatId);
-        $user = $this->message['from'] ?? $this->callbackQuery['from'] ?? null;
-        if ($user !== null) {
-            $this->db->saveUser($user);
-        } else {
-            error_log("❌ Cannot save user: 'from' is missing in both message and callbackQuery.");
-        }
-        if (!$callbackData || !$chatId || !$callbackQueryId || !$messageId) {
-            error_log("Callback query missing required data.");
-            return;
-        }
-        try {
-            
-           
-        } catch (\Throwable $th) {
-            Logger::log(
-                'error',
-                'BotHandler::handleCallbackQuery',
-                'message: ' . $th->getMessage(),
-                ['chat_id' => $chatId, 'callback_data' => $callbackData, 'message' => $this->message],
-                true
-            );
+        if (isset($update['message']['successful_payment'])) {
+            $chatId = $update['message']['chat']['id'];
+            $payload = $update['message']['successful_payment']['invoice_payload'];
+
+            // ... در اینجا منطق بعد از پرداخت موفق را پیاده‌سازی کنید ...
+            // مثلا افزایش موجودی کاربر در دیتابیس
+            // DB::table('users')->update($chatId, ['balance' => new_balance]);
+
+            $this->sendRequest("sendMessage", ["chat_id" => $chatId, "text" => "پرداخت شما با موفقیت انجام شد. سپاسگزاریم!"]);
         }
     }
 
-    public function handleRequest(): void
+    /**
+     * متد کمکی مرکزی برای ذخیره یا آپدیت اطلاعات کاربر در فایل users.json.
+     * @param array $userFromTelegram آرایه اطلاعات کاربر از طرف تلگرام.
+     */
+    private function saveOrUpdateUser(array $userFromTelegram): void
     {
-        if (isset($this->message["from"])) {
-            $this->db->saveUser($this->message["from"]);
-        } else {
-            error_log("BotHandler::handleRequest: 'from' field missing for non-start message. Update type might not be a user message.");
-        }
-        $state = $this->fileHandler->getState($this->chatId);
-        try {
+        $chatId = $userFromTelegram['id'];
 
-            if ($this->text === "/start") {
-                $this->fileHandler->saveState($this->chatId, "");
-                $this->sendRequest("sendMessage", [
-                    "chat_id" => $this->chatId,
-                    "text" => "Welcome to the bot! Use /help to see available commands.",
-                ]);
-            } elseif ($state === "start") {
-                // Handle other commands or states here
-            } else {
-                // Handle unknown state or command
-                $this->sendRequest("sendMessage", [
-                    "chat_id" => $this->chatId,
-                    "text" => "Unknown command. Please use /start to begin."
-                ]);
-            }
-        } catch (\Throwable $th) {
-            Logger::log(
-                'error',
-                'BotHandler::handleRequest',
-                'message: ' . $th->getMessage(),
-                ['chat_id' => $this->chatId, 'text' => $this->text, 'message' => $this->message],
-                true
-            );
+        $existingUser = DB::table('users')->findById($chatId);
+
+
+        $userData = [
+            'first_name' => $userFromTelegram['first_name'],
+            'last_name' => $userFromTelegram['last_name'] ?? null,
+            'username' => $userFromTelegram['username'] ?? null,
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+
+        if ($existingUser === null) {
+            $userData['id'] = $chatId;
+            $userData['language_code'] = $userFromTelegram['language_code'] ?? 'fa';
+            $userData['created_at'] = date('Y-m-d H:i:s');
+            $userData['status'] = 'active'; 
+            $userData['isadmin'] = false; 
+            DB::table('users')->insert($userData);
+        } else {
+            DB::table('users')->update($chatId, $userData);
         }
     }
+
 
     public function sendRequest($method, $data)
     {
@@ -151,38 +175,13 @@ class BotHandler
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_errno($ch) ? curl_error($ch) : null;
         curl_close($ch);
-        $this->logTelegramRequest($method, $data, $response, $httpCode, $curlError);
-        if ($curlError) {
-            Logger::log(
-                'error',
-                'BotHandler::sendRequest',
-                "cURL error: $curlError",
-                ['method' => $method, 'data' => $data],
-                true
-            );
-            return false;
-        }
-        if ($httpCode >= 200 && $httpCode < 300) {
-            return json_decode($response, true);
-        } else {
-            $errorResponse = json_decode($response, true);
-            $errorMessage = $errorResponse['description'] ?? 'Unknown error';
-            return false;
-        }
-    }
 
-    private function logTelegramRequest($method, $data, $response, $httpCode, $curlError = null): void
-    {
-        $logData = [
-            'time' => date("Y-m-d H:i:s"),
-            'method' => $method,
-            'request_data' => $data,
-            'response' => $response,
-            'http_code' => $httpCode,
-            'curl_error' => $curlError
-        ];
-        $logMessage = json_encode($logData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        // لاگ کردن درخواست و پاسخ (برای دیباگ)
+        if ($httpCode >= 400) {
+            Logger::log('error', 'sendRequest failed', "Method: $method, HTTP: $httpCode", ['request' => $data, 'response' => $response]);
+        }
+
+        return json_decode($response, true);
     }
 }
