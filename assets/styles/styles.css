@@ -1,0 +1,131 @@
+/* General styling for body */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f9f9f9;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+/* Container for failed payment page */
+.container.failed {
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 40px;
+    box-shadow: 0 6px 15px rgba(255, 69, 58, 0.1); /* Light red shadow for failed payment */
+    text-align: center;
+    max-width: 450px;
+    width: 100%;
+    position: relative;
+    animation: fadeIn 1s ease-out;
+}
+
+.container.success {
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 40px;
+    box-shadow: 0 6px 15px rgba(0, 128, 0, 0.1);
+    text-align: center;
+    max-width: 450px;
+    width: 100%;
+    position: relative;
+    animation: fadeIn 1s ease-out;
+}
+
+/* Icon styling for error or success */
+.icon {
+    font-size: 60px;
+    color: #e74c3c; /* Red for error */
+    margin-bottom: 20px;
+    animation: pulse 1s infinite alternate;
+}
+
+/* Header styling */
+h1 {
+    font-size: 32px;
+    color: #e74c3c; /* Red for error */
+    margin-bottom: 15px;
+    animation: fadeIn 1s ease-out;
+}
+
+/* Paragraph styling */
+p {
+    font-size: 18px;
+    color: #e74c3c;  /* Red color for error messages */
+    margin-bottom: 20px;
+    animation: fadeIn 1s ease-out;
+    font-weight: 500;
+    line-height: 1.6;
+}
+
+/* Button styling */
+a.btn {
+    display: inline-block;
+    padding: 12px 25px;
+    background-color: #e74c3c;  /* Red button */
+    color: #fff;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+    font-size: 18px;
+    margin-top: 20px;
+}
+
+/* Button hover effect */
+a.btn:hover {
+    background-color: #c0392b;
+}
+
+/* Animation for content */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Animation for failure icon */
+@keyframes pulse {
+    from {
+        transform: scale(1);
+    }
+    to {
+        transform: scale(1.1);
+    }
+}
+
+/* Responsive styling for mobile */
+@media (max-width: 480px) {
+    body {
+        background-color: #f5f5f5;  /* Light background for mobile */
+    }
+
+    .container.failed, .container.success {
+        padding: 20px;  /* Smaller padding for mobile */
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);  /* Softer shadow */
+    }
+
+    h1 {
+        font-size: 26px;  /* Adjust header size */
+        color: #e74c3c; /* Red color for error message */
+    }
+
+    p {
+        font-size: 16px;
+    }
+
+    .icon {
+        font-size: 50px;
+    }
+
+    a.btn {
+        padding: 10px 20px;
+        font-size: 16px;
+    }
+}
