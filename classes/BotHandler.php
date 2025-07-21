@@ -55,6 +55,7 @@ class BotHandler
             if ($this->text === "/start") {
                 DB::table('users')->update($this->chatId, ['state' => '']);
                 $this->MainMenu();
+                return;
             } elseif ($state === "awaiting_name") {
                 // مثالی برای مدیریت یک وضعیت خاص
                 // ...
@@ -64,14 +65,6 @@ class BotHandler
                     "text" => "دستور نامشخص است. لطفاً با /start شروع کنید."
                 ]);
             }
-
-
-
-
-            $this->sendRequest("sendMessage", [
-                "chat_id" => $this->chatId,
-                "text" => "در حال پردازش درخواست شما..."
-            ]);
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);
         }
@@ -94,18 +87,15 @@ class BotHandler
             if ($callbackData === 'main_menu') {
                 $this->MainMenu($messageId);
                 return;
-
             } elseif ($callbackData === 'admin_panel_entry') {
                 $this->showAdminMainMenu();
                 return;
-                
+            } else {
+                $this->sendRequest("answerCallbackQuery", [
+                    "callback_query_id" => $this->callbackQueryId,
+                    "text" => "در حال پردازش درخواست شما..."
+                ]);
             }
-
-
-            $this->sendRequest("answerCallbackQuery", [
-                "callback_query_id" => $this->callbackQueryId,
-                "text" => "در حال پردازش درخواست شما..."
-            ]);
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleCallbackQuery', 'message: ' . $th->getMessage(), ['callbackQuery' => $callbackQuery]);
             return;
@@ -156,7 +146,8 @@ class BotHandler
         $data = [
             'chat_id' => $this->chatId,
             'text' => $menuText,
-            'reply_markup' => $keyboard,
+            'reply_markup' =>  json_encode($keyboard),
+            'parse_mode' => 'HTML',
         ];
 
         if ($messageId) {
