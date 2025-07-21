@@ -79,6 +79,38 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['state' => '']);
                 $this->MainMenu();
                 return;
+            } elseif ($state === "editing_category_name") {
+                $categoryName = trim($this->text);
+                if (empty($categoryName)) {
+                    $this->Alert("نام دسته‌بندی نمی‌تواند خالی باشد.");
+                    return;
+                }
+                $categoryId = $currentUser['editing_category_id'] ?? null;
+                if (!$categoryId) {
+                    $this->Alert("خطا: شناسه دسته‌بندی مشخص نشده است.");
+                    return;
+                }
+                $res = DB::table('categories')->update($categoryId, ['name' => $categoryName]);
+                if ($res) {
+                    DB::table('users')->update($this->chatId, ['state' => '']);
+                    // ساخت دوباره پیام 
+                    $this->sendRequest("editMessageText", [
+                        "chat_id" => $this->chatId,
+                        "message_id" => $this->messageId,
+                        "text" => "دسته‌بندی با موفقیت ویرایش شد: {$categoryName}",
+                        "reply_markup" => [
+                            "inline_keyboard" => [
+                                [
+                                    ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_category_' . $categoryId],
+                                    ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_category_' . $categoryId]
+                                ]
+                            ]
+                        ]
+                    ]);
+                } else {
+                    $this->Alert("خطا در ویرایش دسته‌بندی. لطفاً دوباره تلاش کنید.");
+                }
+                return;
             } elseif ($state === "adding_category_name") {
                 $categoryName = trim($this->text);
                 if (empty($categoryName)) {
@@ -146,7 +178,25 @@ class BotHandler
                 ]);
                 // در اینجا می‌توانید منطق نمایش محصولات یا اطلاعات دسته‌بندی را اضافه کنید
             } elseif (strpos($callbackData, 'admin_edit_category_') === 0) {
-                // منطق ویرایش دسته‌بندی
+                $categoryId = str_replace('admin_edit_category_', '', $callbackData);
+                $category = DB::table('categories')->findById($categoryId);
+                if ($category) {
+                    DB::table('users')->update($this->chatId, ['state' => 'editing_category_name']);
+                    $res = $this->sendRequest("editMessageText", [
+                        "chat_id" => $this->chatId,
+                        "message_id" => $messageId,
+                        "text" => "لطفاً نام جدید دسته‌بندی را وارد کنید: {$category['name']}",
+                        "reply_markup" =>
+                        [
+                            "inline_keyboard" => [
+                                [["text" => "🔙 بازگشت", "callback_data" => "admin_manage_categories"]]
+                            ]
+                        ]
+                    ]);
+                    $this->saveMessageId($this->chatId, $res['result']['message_id'] ?? null);
+                } else {
+                    $this->alert("دسته‌بندی یافت نشد.");
+                }
             } elseif (strpos($callbackData, 'admin_delete_category_') === 0) {
                 // منطق حذف دسته‌بندی
             } elseif ($callbackData === 'admin_add_category') {
@@ -269,13 +319,16 @@ class BotHandler
             return;
         }
         $messageId = $this->getMessageId($this->chatId);
-        $this->sendRequest("editMessageText", [
+        $res = $this->sendRequest("editMessageText", [
             "chat_id" => $this->chatId,
             "message_id" => $messageId,
             "text" => "⏳ در حال ارسال لیست دسته‌بندی‌ها...",
             "reply_markup" => ['inline_keyboard' => []]
         ]);
         $messageIds = [];
+        if (isset($res['result']['message_id'])) {
+            $messageIds[] = $res['result']['message_id'];
+        }
         foreach ($allCategories as $category) {
             $categoryId = $category['id'];
             $categoryName = $category['name'];
