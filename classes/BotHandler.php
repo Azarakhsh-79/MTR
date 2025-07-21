@@ -79,9 +79,9 @@ class BotHandler
                 if ($res) {
                     $this->deleteMessage($this->messageId);
                     DB::table('users')->update($this->chatId, ['state' => '']);
-                 
+
                     $this->Alert("دسته‌بندی جدید با موفقیت ایجاد شد.");
-                    $this->showAdminMainMenu($messageId ?? null);
+                    $this->showCategoryManagementMenu($messageId ?? null);
                 } else {
                     $this->Alert("خطا در ایجاد دسته‌بندی. لطفاً دوباره تلاش کنید.");
                     $this->MainMenu($messageId ?? null);
@@ -121,6 +121,20 @@ class BotHandler
             } elseif ($callbackData === 'admin_manage_categories') {
                 $this->showCategoryManagementMenu($messageId);
                 return;
+            } elseif ($callbackData === 'admin_category_list') {
+                $this->showCategoryList($messageId);
+                return;
+            } elseif (strpos($callbackData, 'category_') === 0) {
+                $categoryId = str_replace('category_', '', $callbackData);
+                $this->sendRequest("answerCallbackQuery", [
+                    "callback_query_id" => $this->callbackQueryId,
+                    "text" => "دسته‌بندی با ID {$categoryId} انتخاب شد."
+                ]);
+                // در اینجا می‌توانید منطق نمایش محصولات یا اطلاعات دسته‌بندی را اضافه کنید
+            } elseif (strpos($callbackData, 'admin_edit_category_') === 0) {
+                // منطق ویرایش دسته‌بندی
+            } elseif (strpos($callbackData, 'admin_delete_category_') === 0) {
+                // منطق حذف دسته‌بندی
             } elseif ($callbackData === 'admin_add_category') {
                 DB::table('users')->update($this->chatId, ['state' => 'adding_category_name']);
                 $res = $this->sendRequest("editMessageText", [
@@ -230,14 +244,67 @@ class BotHandler
             ]);
         }
     }
+    public function showCategoryList($messageId = null): void
+    {
+        $this->Alert("در حال ارسال لیست دسته‌بندی‌ها...", false);
+
+        $allCategories = DB::table('categories')->all();
+
+        if (empty($allCategories)) {
+            $this->Alert("هیچ دسته‌بندی‌ای وجود ندارد.");
+            return;
+        }
+        $this->sendRequest("editMessageText", [
+            "chat_id" => $this->chatId,
+            "message_id" => $messageId,
+            "text" => "⏳ در حال ارسال لیست دسته‌بندی‌ها...",
+            "reply_markup" => [] 
+        ]);
+        $messageIds = [];
+        foreach ($allCategories as $category) {
+            $categoryId = $category['id'];
+            $categoryName = $category['name'];
+
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_category_' . $categoryId],
+                        ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_category_' . $categoryId]
+                    ]
+                ]
+            ];
+
+            $res = $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => "دسته: {$categoryName}",
+                "parse_mode" => "Markdown",
+                "reply_markup" => $keyboard
+            ]);
+            if (isset($res['result']['message_id'])) {
+                $messageIds[] = $res['result']['message_id'];
+            }
+        }
+
+
+        $this->sendRequest("sendMessage", [
+            "chat_id" => $this->chatId,
+            "text" => "--- پایان لیست ---",
+            "reply_markup" => [
+                'inline_keyboard' => [
+                    [['text' => '⬅️ بازگشت ', 'callback_data' => 'admin_manage_categories']]
+                ]
+            ]
+        ]);
+
+        DB::table('users')->update($this->chatId, ['messages_to_delete' => $messageIds]);
+    }
     public function showCategoryManagementMenu($messageId = null): void
     {
         $text = "بخش مدیریت دسته‌بندی‌ها. لطفاً یک گزینه را انتخاب کنید:";
         $keyboard = [
             'inline_keyboard' => [
                 [['text' => '➕ افزودن دسته‌بندی جدید', 'callback_data' => 'admin_add_category']],
-                [['text' => '✏️ ویرایش دسته‌بندی‌ها', 'callback_data' => 'admin_edit_category_list']],
-                [['text' => '🗑 حذف دسته‌بندی', 'callback_data' => 'admin_delete_category_list']],
+                [['text' => '📜 لیست دسته‌بندی‌ها', 'callback_data' => 'admin_category_list']],
                 [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']]
             ]
         ];
@@ -257,8 +324,6 @@ class BotHandler
             ]);
         }
     }
-
-
     public function Alert($message, $alert = true): void
     {
         if ($this->callbackQueryId) {
@@ -273,11 +338,9 @@ class BotHandler
                 "chat_id" => $this->chatId,
                 "text" => $message,
             ]);
-            $this->deleteMessage($res['result']['message_id'] ?? null, 3); 
+            $this->deleteMessage($res['result']['message_id'] ?? null, 3);
         }
     }
-
-
     public function handlePreCheckoutQuery($update): void
     {
         if (isset($update['pre_checkout_query'])) {
@@ -290,8 +353,6 @@ class BotHandler
             ]);
         }
     }
-
-
     public function handleSuccessfulPayment($update): void
     {
         if (isset($update['message']['successful_payment'])) {
@@ -305,7 +366,6 @@ class BotHandler
             $this->sendRequest("sendMessage", ["chat_id" => $chatId, "text" => "پرداخت شما با موفقیت انجام شد. سپاسگزاریم!"]);
         }
     }
-
     private function saveOrUpdateUser(array $userFromTelegram): void
     {
         $chatId = $userFromTelegram['id'];
@@ -331,7 +391,6 @@ class BotHandler
             DB::table('users')->update($chatId, $userData);
         }
     }
-
     public function createNewCategory(string $name)
     {
         $categories = DB::table('categories')->all();
@@ -380,7 +439,6 @@ class BotHandler
         //  Logger::log('info', 'sendRequest success', "Method: $method, HTTP: $httpCode", $response, true);
         return $response;
     }
-    //savemessageId
     public function saveMessageId($chatId, $messageId)
     {
         if (!$chatId || !$messageId) {
@@ -400,7 +458,6 @@ class BotHandler
             return false;
         }
     }
-    // getMessageId
     public function getMessageId($chatId)
     {
         if (!$chatId) {
