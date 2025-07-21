@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 use Config\AppConfig;
 use Bot\BotHandler;
@@ -21,7 +21,7 @@ if (isset($update['inline_query'])) {
     $inlineQuery = $update['inline_query'];
     $query = $inlineQuery['query'];
 
-    $inlineQueryHandler = new InlineQueryHandler();
+    // $inlineQueryHandler = new InlineQueryHandler();
     $inlineQueryHandler->handleInlineQuery($inlineQuery);
 } elseif (isset($update['message'])) {
     $message = $update['message'];
