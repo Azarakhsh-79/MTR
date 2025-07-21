@@ -11,7 +11,8 @@ cronjobs/error_log
 
 *.json
 
-
+log/
+data/
 vendor/
 composer.lock
 composer.phar
