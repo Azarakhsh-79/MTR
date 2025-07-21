@@ -227,7 +227,7 @@ class BotHandler
                 [['text' => '➕ افزودن دسته‌بندی جدید', 'callback_data' => 'admin_add_category']],
                 [['text' => '✏️ ویرایش دسته‌بندی‌ها', 'callback_data' => 'admin_edit_category_list']],
                 [['text' => '🗑 حذف دسته‌بندی', 'callback_data' => 'admin_delete_category_list']],
-                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'main_menu']]
+                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']]
             ]
         ];
 
