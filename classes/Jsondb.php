@@ -72,17 +72,13 @@ class JsonDB
     public function unsetKey($id, string $key): bool
     {
         $allData = $this->getAllData();
-
         if (!isset($allData[$id])) {
             return false;
         }
-
         if (array_key_exists($key, $allData[$id])) {
             unset($allData[$id][$key]);
         }
-
         $this->saveAllData($allData);
-
         return true;
     }
 
