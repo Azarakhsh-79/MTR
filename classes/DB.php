@@ -2,7 +2,7 @@
 
 namespace Bot;
 
-
+use Bot\JsonDB;
 class DB
 {
     private static $instances = [];

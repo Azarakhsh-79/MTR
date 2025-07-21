@@ -32,6 +32,7 @@ class AppConfig
                     'token' => $_ENV['BOT_TOKEN'] ?? $_SERVER['BOT_TOKEN'],
                     'merchant_id' => $_ENV['MERCHANT_ID'],
                     'bot_link' => $_ENV['BOT_LINK'],
+                    'log_channel' => '@mybugsram'
                 ],
                 'ai' => [
                     'gpt' => [
