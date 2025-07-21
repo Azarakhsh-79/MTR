@@ -273,7 +273,7 @@ class BotHandler
             "chat_id" => $this->chatId,
             "message_id" => $messageId,
             "text" => "⏳ در حال ارسال لیست دسته‌بندی‌ها...",
-            "reply_markup" => []
+            "reply_markup" => ['inline_keyboard' => []]
         ]);
         $messageIds = [];
         foreach ($allCategories as $category) {
@@ -316,7 +316,7 @@ class BotHandler
     public function showCategoryManagementMenu($messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
-        if(isset($user['messages_ids'])) {
+        if (isset($user['messages_ids'])) {
             $this->deleteMessages($user['messages_ids']);
         }
         $text = "بخش مدیریت دسته‌بندی‌ها. لطفاً یک گزینه را انتخاب کنید:";
