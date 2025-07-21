@@ -109,7 +109,7 @@ class BotHandler
                 $this->showAdminMainMenu($messageId);
                 return;
             } elseif ($callbackData === 'admin_manage_categories') {
-                $this->showCategoryManagementMenu();
+                $this->showCategoryManagementMenu( $messageId);
                 return;
             } elseif ($callbackData === 'admin_add_category') {
                 DB::table('users')->update($this->chatId, ['state' => 'adding_category_name']);
@@ -219,7 +219,7 @@ class BotHandler
             ]);
         }
     }
-    public function showCategoryManagementMenu($messageId): void
+    public function showCategoryManagementMenu($messageId = null): void
     {
         $text = "بخش مدیریت دسته‌بندی‌ها. لطفاً یک گزینه را انتخاب کنید:";
         $keyboard = [
