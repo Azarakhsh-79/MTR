@@ -6,11 +6,11 @@ use Exception;
 
 class JsonDB
 {
-    
+
     private string $dataDir;
     private string $table;
     private string $filePath;
- 
+
 
     public function __construct(string $tableName)
     {
@@ -18,21 +18,21 @@ class JsonDB
             throw new Exception("نام جدول نامعتبر است.");
         }
         $this->table = $tableName;
-        $this->dataDir = __DIR__ . '/../data/'; 
+        $this->dataDir = __DIR__ . '/../data/';
 
         if (!is_dir($this->dataDir)) {
             mkdir($this->dataDir, 0775, true);
         }
 
         $this->filePath = $this->dataDir . $this->table . '.json';
-        date_default_timezone_set('Asia/Tehran'); 
+        date_default_timezone_set('Asia/Tehran');
     }
 
-    
+
     public function insert(array $data)
     {
         $allData = $this->getAllData();
-        
+
         $id = $data['id'] ?? uniqid(time() . '_');
         $data['id'] = $id;
 
@@ -69,11 +69,28 @@ class JsonDB
         return $results;
     }
 
+    public function unsetKey($id, string $key): bool
+    {
+        $allData = $this->getAllData();
+
+        if (!isset($allData[$id])) {
+            return false;
+        }
+
+        if (array_key_exists($key, $allData[$id])) {
+            unset($allData[$id][$key]);
+        }
+
+        $this->saveAllData($allData);
+
+        return true;
+    }
+
     public function update($id, array $newData): bool
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
-            return false; 
+            return false;
         }
 
         $allData[$id] = array_merge($allData[$id], $newData);
@@ -94,7 +111,7 @@ class JsonDB
 
         return true;
     }
-    
+
     public function all(): array
     {
         return $this->getAllData();
@@ -110,7 +127,7 @@ class JsonDB
         if ($content === false) {
             return [];
         }
-        
+
         $data = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -124,7 +141,7 @@ class JsonDB
     private function saveAllData(array $data): void
     {
         $jsonData = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        
+
         $file = fopen($this->filePath, 'c+');
         if ($file === false) {
             error_log("امکان باز کردن فایل برای نوشتن وجود ندارد: " . $this->filePath);
@@ -132,12 +149,12 @@ class JsonDB
         }
 
         if (flock($file, LOCK_EX)) {
-            ftruncate($file, 0); 
+            ftruncate($file, 0);
             fwrite($file, $jsonData);
             fflush($file);
-            flock($file, LOCK_UN); 
+            flock($file, LOCK_UN);
         }
-        
+
         fclose($file);
     }
 }

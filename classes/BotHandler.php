@@ -48,6 +48,20 @@ class BotHandler
         sleep($delay);
         $response = $this->sendRequest("deleteMessage", $data);
     }
+    public function deleteMessages(array $messageIds): bool
+    {
+        if (empty($messageIds) || count($messageIds) > 100) {
+            return false;
+        }
+        $data = [
+            'chat_id' => $this->chatId,
+            'message_ids' => $messageIds
+        ];
+
+        $response = $this->sendRequest("deleteMessages", $data);
+        DB::table('users')->unsetKey($this->chatId, 'messages_ids');
+        return $response['ok'] ?? false;
+    }
     public function handleRequest(): void
     {
         if (isset($this->message["from"])) {
@@ -254,11 +268,12 @@ class BotHandler
             $this->Alert("هیچ دسته‌بندی‌ای وجود ندارد.");
             return;
         }
+        $messageId = $this->getMessageId($this->chatId);
         $this->sendRequest("editMessageText", [
             "chat_id" => $this->chatId,
             "message_id" => $messageId,
             "text" => "⏳ در حال ارسال لیست دسته‌بندی‌ها...",
-            "reply_markup" => [] 
+            "reply_markup" => []
         ]);
         $messageIds = [];
         foreach ($allCategories as $category) {
@@ -296,10 +311,14 @@ class BotHandler
             ]
         ]);
 
-        DB::table('users')->update($this->chatId, ['messages_to_delete' => $messageIds]);
+        DB::table('users')->update($this->chatId, ['messages_ids' => $messageIds]);
     }
     public function showCategoryManagementMenu($messageId = null): void
     {
+        $user = DB::table('users')->findById($this->chatId);
+        if(isset($user['messages_ids'])) {
+            $this->deleteMessages($user['messages_ids']);
+        }
         $text = "بخش مدیریت دسته‌بندی‌ها. لطفاً یک گزینه را انتخاب کنید:";
         $keyboard = [
             'inline_keyboard' => [
@@ -310,18 +329,21 @@ class BotHandler
         ];
 
         if ($messageId) {
-            $this->sendRequest("editMessageText", [
+            $res =  $this->sendRequest("editMessageText", [
                 "chat_id" => $this->chatId,
                 "message_id" => $messageId,
                 "text" => $text,
                 "reply_markup" => json_encode($keyboard)
             ]);
         } else {
-            $this->sendRequest("sendMessage", [
+            $res =   $this->sendRequest("sendMessage", [
                 "chat_id" => $this->chatId,
                 "text" => $text,
                 "reply_markup" => json_encode($keyboard)
             ]);
+        }
+        if (isset($res['result']['message_id'])) {
+            $this->saveMessageId($this->chatId, $res['result']['message_id']);
         }
     }
     public function Alert($message, $alert = true): void
