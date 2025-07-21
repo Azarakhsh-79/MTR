@@ -56,9 +56,27 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['state' => '']);
                 $this->MainMenu();
                 return;
-            } elseif ($state === "awaiting_name") {
-                // مثالی برای مدیریت یک وضعیت خاص
-                // ...
+            } elseif ($state === "adding_category_name") {
+                $categoryName = trim($this->text);
+                if (empty($categoryName)) {
+                    $this->sendRequest("sendMessage", [
+                        "chat_id" => $this->chatId,
+                        "text" => "نام دسته‌بندی نمی‌تواند خالی باشد."
+                    ]);
+                    return;
+                }
+                $res = $this->createNewCategory($categoryName);
+                if ($res) {
+                    $this->Alert("دسته‌بندی جدید با موفقیت ایجاد شد.");
+                    DB::table('users')->update($this->chatId, ['state' => '']);
+                    $messageId = $this->getMessageId($this->chatId);
+                   
+                    $this->showAdminMainMenu($messageId ?? null);
+
+                } else {
+                    $this->Alert("خطا در ایجاد دسته‌بندی. لطفاً دوباره تلاش کنید.");
+                }
+                return;
             } else {
                 $this->sendRequest("sendMessage", [
                     "chat_id" => $this->chatId,
@@ -88,8 +106,24 @@ class BotHandler
                 $this->MainMenu($messageId);
                 return;
             } elseif ($callbackData === 'admin_panel_entry') {
-                $this->showAdminMainMenu();
+                $this->showAdminMainMenu($messageId);
                 return;
+            } elseif ($callbackData === 'admin_manage_categories') {
+                $this->showCategoryManagementMenu();
+                return;
+            } elseif ($callbackData === 'admin_add_category') {
+                DB::table('users')->update($this->chatId, ['state' => 'adding_category_name']);
+                $res = $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => "لطفاً نام دسته‌بندی جدید را وارد کنید:",
+                    "reply_markup" => json_encode([
+                        'inline_keyboard' => [
+                            [['text' => '🔙 بازگشت', 'callback_data' => 'admin_panel_entry']]
+                        ]
+                    ])
+
+                ]);
+                $this->saveMessageId( $this->chatId, $res['result']['message_id'] ?? null);
             } else {
                 $this->sendRequest("answerCallbackQuery", [
                     "callback_query_id" => $this->callbackQueryId,
@@ -157,7 +191,7 @@ class BotHandler
             $this->sendRequest("sendMessage", $data);
         }
     }
-    public function showAdminMainMenu(): void
+    public function showAdminMainMenu($messageId = null): void
     {
         $keyboard = [
             'inline_keyboard' => [
@@ -169,10 +203,40 @@ class BotHandler
             ]
         ];
 
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                "chat_id" => $this->chatId,
+                "message_id" => $messageId,
+                "text" => "پنل مدیریت ربات:",
+                "reply_markup" => json_encode($keyboard)
+            ]);
+            return;
+        } else {
+            $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => "پنل مدیریت ربات:",
+                "reply_markup" => $keyboard
+            ]);
+        }
+    }
+    public function showCategoryManagementMenu(): void
+    {
+        $text = "بخش مدیریت دسته‌بندی‌ها. لطفاً یک گزینه را انتخاب کنید:";
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '➕ افزودن دسته‌بندی جدید', 'callback_data' => 'admin_add_category']],
+                [['text' => '✏️ ویرایش دسته‌بندی‌ها', 'callback_data' => 'admin_edit_category_list']],
+                [['text' => '🗑 حذف دسته‌بندی', 'callback_data' => 'admin_delete_category_list']],
+                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']]
+            ]
+        ];
+
+
         $this->sendRequest("sendMessage", [
             "chat_id" => $this->chatId,
-            "text" => "پنل مدیریت ربات:",
-            "reply_markup" => $keyboard
+            "text" => $text,
+            "reply_markup" => json_encode($keyboard),
+            "parse_mode" => "HTML"
         ]);
     }
 
@@ -242,14 +306,41 @@ class BotHandler
             $userData['language_code'] = $userFromTelegram['language_code'] ?? 'fa';
             $userData['created_at'] = date('Y-m-d H:i:s');
             $userData['status'] = 'active';
-            $userData['isadmin'] = false;
+            $userData['is_admin'] = false;
             DB::table('users')->insert($userData);
         } else {
             DB::table('users')->update($chatId, $userData);
         }
     }
 
+    public function createNewCategory(string $name)
+    {
+        $categories = DB::table('categories')->all();
 
+        $newId = 1;
+        $newSortOrder = 0;
+        if (!empty($categories)) {
+            $ids = array_keys($categories);
+            $sortOrders = array_column($categories, 'sort_order');
+            $newId = max($ids) + 1;
+            $newSortOrder = max($sortOrders) + 1;
+        }
+
+        $newCategory = [
+            'id' => $newId,
+            'name' => $name,
+            'parent_id' => 0,
+            'is_active' => true,
+            'sort_order' => $newSortOrder
+        ];
+
+        $res = DB::table('categories')->insert($newCategory);
+        if ($res) {
+            return $res;
+        } else {
+            return null;
+        }
+    }
     public function sendRequest($method, $data)
     {
         $url = "https://api.telegram.org/bot" . $this->botToken . "/$method";
@@ -262,11 +353,47 @@ class BotHandler
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-       
+
         if ($httpCode >= 400) {
             Logger::log('error', 'sendRequest failed', "Method: $method, HTTP: $httpCode", ['request' => $data, 'response' => $response]);
         }
-        Logger::log('info', 'sendRequest success', "Method: $method, HTTP: $httpCode", ['request' => $data, 'response' => $response],true);
-        return json_decode($response, true);
+        $response = json_decode($response, true);
+        //  Logger::log('info', 'sendRequest success', "Method: $method, HTTP: $httpCode", $response, true);
+        return $response;
+    }
+    //savemessageId
+    public function saveMessageId($chatId, $messageId)
+    {
+        if (!$chatId || !$messageId) {
+            Logger::log('error', 'saveMessageId failed', 'Chat ID or Message ID is missing', ['chat_id' => $chatId, 'message_id' => $messageId]);
+            return false;
+        }
+
+        $data = [
+            'message_id' => $messageId,
+        ];
+
+        $result = DB::table('users')->update($chatId, $data);
+        if ($result) {
+            return true;
+        } else {
+            Logger::log('error', 'saveMessageId failed', 'Failed to save Message ID', ['chat_id' => $chatId, 'message_id' => $messageId]);
+            return false;
+        }
+    }
+    // getMessageId
+    public function getMessageId($chatId)
+    {
+        if (!$chatId) {
+            return null;
+        }
+
+        $message = DB::table('users')->findById($chatId);
+        if ($message && isset($message['message_id'])) {
+            return $message['message_id'];
+        } else {
+            Logger::log('error', 'getMessageId failed', 'Message ID not found for Chat ID', ['chat_id' => $chatId]);
+            return null;
+        }
     }
 }

@@ -10,6 +10,8 @@ class JsonDB
     private string $dataDir;
     private string $table;
     private string $filePath;
+ 
+
     public function __construct(string $tableName)
     {
         if (empty($tableName) || !preg_match('/^[a-zA-Z0-9_]+$/', $tableName)) {
@@ -23,6 +25,7 @@ class JsonDB
         }
 
         $this->filePath = $this->dataDir . $this->table . '.json';
+        date_default_timezone_set('Asia/Tehran'); 
     }
 
     
