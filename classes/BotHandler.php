@@ -177,7 +177,7 @@ class BotHandler
                     "callback_query_id" => $this->callbackQueryId,
                     "text" => "دسته‌بندی با ID {$categoryId} انتخاب شد."
                 ]);
-                // در اینجا می‌توانید منطق نمایش محصولات یا اطلاعات دسته‌بندی را اضافه کنید
+
             } elseif (strpos($callbackData, 'admin_edit_category_') === 0) {
                 $categoryId = str_replace('admin_edit_category_', '', $callbackData);
                 $category = DB::table('categories')->findById($categoryId);
@@ -199,7 +199,26 @@ class BotHandler
                     $this->alert("دسته‌بندی یافت نشد.");
                 }
             } elseif (strpos($callbackData, 'admin_delete_category_') === 0) {
-                // منطق حذف دسته‌بندی
+                $categoryId = str_replace('admin_delete_category_', '', $callbackData);
+                $category = DB::table('categories')->findById($categoryId);
+                if (!$category) {
+                    $this->alert("دسته‌بندی یافت نشد.");
+                    return;
+                } 
+                $res = DB::table('categories')->delete($categoryId);
+                if ($res) {
+                    $this->Alert("دسته‌بندی با موفقیت حذف شد.");
+                    $this->deleteMessage($messageId);
+                } else {
+                    $this->Alert("خطا در حذف دسته‌بندی. لطفاً دوباره تلاش کنید.");
+                }
+            } elseif ($callbackData === 'admin_manage_products') {
+                $this->Alert("این بخش هنوز آماده نیست.");
+            } elseif ($callbackData === 'admin_bot_settings') {
+                $this->Alert("این بخش هنوز آماده نیست.");
+            } elseif ($callbackData === 'admin_reports') {
+                $this->Alert("این بخش هنوز آماده نیست.");
+                
             } elseif ($callbackData === 'admin_add_category') {
                 DB::table('users')->update($this->chatId, ['state' => 'adding_category_name']);
                 $res = $this->sendRequest("editMessageText", [
