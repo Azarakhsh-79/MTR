@@ -4,6 +4,7 @@ namespace Bot;
 
 use Config\AppConfig;
 use Payment\ZarinpalPaymentHandler;
+use React\EventLoop\Loop;
 
 require_once __DIR__ . "/../config/jdf.php";
 
@@ -91,6 +92,18 @@ class BotHandler
             error_log("Callback query missing required data.");
             return;
         }
+        try {
+            
+           
+        } catch (\Throwable $th) {
+            Logger::log(
+                'error',
+                'BotHandler::handleCallbackQuery',
+                'message: ' . $th->getMessage(),
+                ['chat_id' => $chatId, 'callback_data' => $callbackData, 'message' => $this->message],
+                true
+            );
+        }
     }
 
     public function handleRequest(): void
@@ -101,6 +114,32 @@ class BotHandler
             error_log("BotHandler::handleRequest: 'from' field missing for non-start message. Update type might not be a user message.");
         }
         $state = $this->fileHandler->getState($this->chatId);
+        try {
+
+            if ($this->text === "/start") {
+                $this->fileHandler->saveState($this->chatId, "");
+                $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => "Welcome to the bot! Use /help to see available commands.",
+                ]);
+            } elseif ($state === "start") {
+                // Handle other commands or states here
+            } else {
+                // Handle unknown state or command
+                $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => "Unknown command. Please use /start to begin."
+                ]);
+            }
+        } catch (\Throwable $th) {
+            Logger::log(
+                'error',
+                'BotHandler::handleRequest',
+                'message: ' . $th->getMessage(),
+                ['chat_id' => $this->chatId, 'text' => $this->text, 'message' => $this->message],
+                true
+            );
+        }
     }
 
     public function sendRequest($method, $data)
@@ -117,6 +156,13 @@ class BotHandler
         curl_close($ch);
         $this->logTelegramRequest($method, $data, $response, $httpCode, $curlError);
         if ($curlError) {
+            Logger::log(
+                'error',
+                'BotHandler::sendRequest',
+                "cURL error: $curlError",
+                ['method' => $method, 'data' => $data],
+                true
+            );
             return false;
         }
         if ($httpCode >= 200 && $httpCode < 300) {

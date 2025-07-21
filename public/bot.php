@@ -46,3 +46,5 @@ if (isset($update['inline_query'])) {
     $bot = new BotHandler(null, null, null, null);
     $bot->handlePreCheckoutQuery($update);
 }
+
+//https://api.telegram.org/bot7570808101:AAGVXdcvHJt7qbLQj3vtkg90vhSR48EYDMg/setWebhook?url=https://www.rammehraz.com/Rambot/test/Amir/MTR/public/bot.php
