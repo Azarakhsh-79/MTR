@@ -79,7 +79,7 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['state' => '']);
                 $this->MainMenu();
                 return;
-            } elseif ($state === "editing_category_name") {
+            } elseif (str_starts_with($state, 'editing_category_name_')) {
                 $categoryName = trim($this->text);
                 if (empty($categoryName)) {
                     $this->Alert("نام دسته‌بندی نمی‌تواند خالی باشد.");
