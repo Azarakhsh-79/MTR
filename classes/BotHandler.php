@@ -5,8 +5,7 @@ namespace Bot;
 use Config\AppConfig;
 use Payment\ZarinpalPaymentHandler;
 use React\EventLoop\Loop;
-
-require_once __DIR__ . "/../config/jdf.php";
+use Config\jdf;
 
 class BotHandler
 {
