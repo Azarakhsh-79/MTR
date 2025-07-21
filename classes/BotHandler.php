@@ -219,7 +219,7 @@ class BotHandler
             ]);
         }
     }
-    public function showCategoryManagementMenu(): void
+    public function showCategoryManagementMenu($messageId): void
     {
         $text = "بخش مدیریت دسته‌بندی‌ها. لطفاً یک گزینه را انتخاب کنید:";
         $keyboard = [
@@ -231,13 +231,20 @@ class BotHandler
             ]
         ];
 
-
-        $this->sendRequest("sendMessage", [
-            "chat_id" => $this->chatId,
-            "text" => $text,
-            "reply_markup" => json_encode($keyboard),
-            "parse_mode" => "HTML"
-        ]);
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                "chat_id" => $this->chatId,
+                "message_id" => $messageId,
+                "text" => $text,
+                "reply_markup" => json_encode($keyboard)
+            ]);
+        } else {
+            $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => $text,
+                "reply_markup" => json_encode($keyboard)
+            ]);
+        }
     }
 
 
