@@ -85,7 +85,7 @@ class BotHandler
                     $this->Alert("نام دسته‌بندی نمی‌تواند خالی باشد.");
                     return;
                 }
-                $categoryId = $currentUser['editing_category_id'] ?? null;
+                $categoryId = str_replace('editing_category_name_', '', $state);
                 if (!$categoryId) {
                     $this->Alert("خطا: شناسه دسته‌بندی مشخص نشده است.");
                     return;
@@ -181,7 +181,7 @@ class BotHandler
                 $categoryId = str_replace('admin_edit_category_', '', $callbackData);
                 $category = DB::table('categories')->findById($categoryId);
                 if ($category) {
-                    DB::table('users')->update($this->chatId, ['state' => 'editing_category_name']);
+                    DB::table('users')->update($this->chatId, ['state' => "editing_category_name_{$categoryId}"]);
                     $res = $this->sendRequest("editMessageText", [
                         "chat_id" => $this->chatId,
                         "message_id" => $messageId,
