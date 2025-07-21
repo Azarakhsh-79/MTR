@@ -199,7 +199,7 @@ class BotHandler
                 [['text' => '📝 مدیریت محصولات', 'callback_data' => 'admin_manage_products']],
                 [['text' => '⚙️ تنظیمات ربات', 'callback_data' => 'admin_bot_settings']],
                 [['text' => '📊 آمار و گزارشات', 'callback_data' => 'admin_reports']],
-                [['text' => '🔙 بازگشت به منوی اصلی', 'callback_data' => 'main_meno']]
+                [['text' => '🔙 بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
             ]
         ];
 
