@@ -262,11 +262,11 @@ class BotHandler
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        // لاگ کردن درخواست و پاسخ (برای دیباگ)
+       
         if ($httpCode >= 400) {
             Logger::log('error', 'sendRequest failed', "Method: $method, HTTP: $httpCode", ['request' => $data, 'response' => $response]);
         }
-
+        Logger::log('info', 'sendRequest success', "Method: $method, HTTP: $httpCode", ['request' => $data, 'response' => $response],true);
         return json_decode($response, true);
     }
 }
