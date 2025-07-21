@@ -20,6 +20,7 @@ class BotHandler
     private $zarinpalPaymentHandler;
     private $botToken;
     private $botLink;
+    private $callbackQueryId;
 
     public function __construct($chatId, $text, $messageId, $message)
     {
@@ -48,15 +49,12 @@ class BotHandler
         }
 
         $currentUser = DB::table('users')->findById($this->chatId);
-        $state = $currentUser['state'] ?? ''; 
+        $state = $currentUser['state'] ?? '';
 
         try {
-            if ($this->text === "/start") { 
+            if ($this->text === "/start") {
                 DB::table('users')->update($this->chatId, ['state' => '']);
-                $this->sendRequest("sendMessage", [
-                    "chat_id" => $this->chatId,
-                    "text" => "به ربات خوش آمدید! برای دیدن دستورات از /help استفاده کنید.",
-                ]);
+                $this->MainMenu();
             } elseif ($state === "awaiting_name") {
                 // مثالی برای مدیریت یک وضعیت خاص
                 // ...
@@ -66,32 +64,146 @@ class BotHandler
                     "text" => "دستور نامشخص است. لطفاً با /start شروع کنید."
                 ]);
             }
+
+
+
+
+            $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => "در حال پردازش درخواست شما..."
+            ]);
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);
         }
     }
 
-   
+
     public function handleCallbackQuery($callbackQuery): void
     {
         $chatId = $callbackQuery["message"]["chat"]["id"] ?? null;
-        if (!$chatId) return;
+        $messageId = $callbackQuery["message"]["message_id"] ?? null;
+        $callbackData = $callbackQuery["data"] ?? null;
+        $this->callbackQueryId = $callbackQuery["id"] ?? null;
 
+        if (!$chatId) return;
         if (isset($callbackQuery["from"])) {
             $this->saveOrUpdateUser($callbackQuery["from"]);
         }
 
-        $callbackData = $callbackQuery["data"] ?? null;
-        $callbackQueryId = $callbackQuery["id"] ?? null;
+        try {
+            if ($callbackData === 'main_menu') {
+                $this->MainMenu($messageId);
+                return;
 
-        // ... در اینجا منطق مربوط به پردازش دکمه‌های مختلف را پیاده‌سازی کنید ...
-        // مثال:
-        // if ($callbackData === 'show_profile') { ... }
+            } elseif ($callbackData === 'admin_panel_entry') {
+                $this->showAdminMainMenu();
+                return;
+                
+            }
 
-        $this->sendRequest('answerCallbackQuery', ['callback_query_id' => $callbackQueryId]);
+
+            $this->sendRequest("answerCallbackQuery", [
+                "callback_query_id" => $this->callbackQueryId,
+                "text" => "در حال پردازش درخواست شما..."
+            ]);
+        } catch (\Throwable $th) {
+            Logger::log('error', 'BotHandler::handleCallbackQuery', 'message: ' . $th->getMessage(), ['callbackQuery' => $callbackQuery]);
+            return;
+        }
+
+
+
+        $this->sendRequest('answerCallbackQuery', ['callback_query_id' => $this->callbackQueryId]);
     }
 
-    
+    public function MainMenu($messageId = null): void
+    {
+        $settings = DB::table('settings')->all();
+        $menuText = $settings['main_menu_text'] ?? 'به فروشگاه ما خوش آمدید!';
+
+        $allCategories = DB::table('categories')->all();
+        $categoryButtons = [];
+
+        if (!empty($allCategories)) {
+            $activeCategories = [];
+            foreach ($allCategories as $category) {
+                if (isset($category['parent_id']) && $category['parent_id'] == 0 && !empty($category['is_active'])) {
+                    $activeCategories[] = $category;
+                }
+            }
+            usort($activeCategories, fn($a, $b) => ($a['sort_order'] ?? 0) <=> ($b['sort_order'] ?? 0));
+
+            $row = [];
+            foreach ($activeCategories as $category) {
+                $row[] = ['text' => $category['name'], 'callback_data' => 'category_' . $category['id']];
+                if (count($row) == 2) {
+                    $categoryButtons[] = $row;
+                    $row = [];
+                }
+            }
+            if (!empty($row)) {
+                $categoryButtons[] = $row;
+            }
+        }
+
+        $user = DB::table('users')->findById($this->chatId);
+        if ($user && !empty($user['is_admin'])) {
+            $categoryButtons[] = [['text' => '🔐 ورود به پنل مدیریت', 'callback_data' => 'admin_panel_entry']];
+        }
+
+        $keyboard = ['inline_keyboard' => $categoryButtons];
+
+        $data = [
+            'chat_id' => $this->chatId,
+            'text' => $menuText,
+            'reply_markup' => $keyboard,
+        ];
+
+        if ($messageId) {
+            $data['message_id'] = $messageId;
+            $this->sendRequest("editMessageText", $data);
+        } else {
+            $this->sendRequest("sendMessage", $data);
+        }
+    }
+    public function showAdminMainMenu(): void
+    {
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '🛍 مدیریت دسته‌بندی‌ها', 'callback_data' => 'admin_manage_categories']],
+                [['text' => '📝 مدیریت محصولات', 'callback_data' => 'admin_manage_products']],
+                [['text' => '⚙️ تنظیمات ربات', 'callback_data' => 'admin_bot_settings']],
+                [['text' => '📊 آمار و گزارشات', 'callback_data' => 'admin_reports']],
+                [['text' => '🔙 بازگشت به منوی اصلی', 'callback_data' => 'main_meno']]
+            ]
+        ];
+
+        $this->sendRequest("sendMessage", [
+            "chat_id" => $this->chatId,
+            "text" => "پنل مدیریت ربات:",
+            "reply_markup" => $keyboard
+        ]);
+    }
+
+
+    public function Alert($message, $alert = true): void
+    {
+        if ($this->callbackQueryId) {
+            $data = [
+                'callback_query_id' => $this->callbackQueryId,
+                'text' => $message,
+                'show_alert' => $alert
+            ];
+            $this->sendRequest("answerCallbackQuery", $data);
+        } else {
+            $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => $message,
+            ]);
+        }
+    }
+
+
     public function handlePreCheckoutQuery($update): void
     {
         if (isset($update['pre_checkout_query'])) {
@@ -105,7 +217,7 @@ class BotHandler
         }
     }
 
-    
+
     public function handleSuccessfulPayment($update): void
     {
         if (isset($update['message']['successful_payment'])) {
@@ -138,8 +250,8 @@ class BotHandler
             $userData['id'] = $chatId;
             $userData['language_code'] = $userFromTelegram['language_code'] ?? 'fa';
             $userData['created_at'] = date('Y-m-d H:i:s');
-            $userData['status'] = 'active'; 
-            $userData['isadmin'] = false; 
+            $userData['status'] = 'active';
+            $userData['isadmin'] = false;
             DB::table('users')->insert($userData);
         } else {
             DB::table('users')->update($chatId, $userData);

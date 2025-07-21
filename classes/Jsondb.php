@@ -25,6 +25,7 @@ class JsonDB
         $this->filePath = $this->dataDir . $this->table . '.json';
     }
 
+    
     public function insert(array $data)
     {
         $allData = $this->getAllData();
