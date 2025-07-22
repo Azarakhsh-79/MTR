@@ -832,7 +832,7 @@ class BotHandler
                 DB::table('users')->unsetKey($this->chatId, 'state_data');
 
                 $this->Alert("✅ محصول جدید با موفقیت ایجاد شد!");
-                $this->showProductManagementMenu(); 
+                $this->showProductManagementMenu($messageId); 
                 break;
         }
     }
