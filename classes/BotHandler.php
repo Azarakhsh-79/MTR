@@ -793,7 +793,7 @@ class BotHandler
 
             case 'adding_product_price':
                 $price = trim($this->text);
-                
+                $this->deleteMessage($this->messageId);
                 if (!is_numeric($price) || $price < 0) {
                     $this->Alert("⚠️ لطفاً یک قیمت معتبر وارد کنید (فقط عدد انگلیسی).");
                      return; 
@@ -819,6 +819,7 @@ class BotHandler
                 break;
 
             case 'adding_product_photo':
+                $this->deleteMessage($this->messageId);
                 if (isset($this->message['photo'])) {
                     $stateData['image_file_id'] = end($this->message['photo'])['file_id'];
                 } elseif ($this->text !== '/skip') {
