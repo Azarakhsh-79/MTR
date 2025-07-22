@@ -81,8 +81,7 @@ class BotHandler
                 return;
             }
 
-            $state = $user['state'] ?? '';
-
+           
             if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
                 return;
@@ -146,6 +145,7 @@ class BotHandler
                     "text" => "دستور نامشخص است. لطفاً با /start شروع کنید."
                 ]);
             }
+
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);
         }
@@ -238,6 +238,10 @@ class BotHandler
                 $this->saveMessageId($this->chatId, $res['result']['message_id'] ?? null);
                 return;
             } elseif ($callbackData === 'admin_manage_products') {
+                $user = DB::table('users')->findById($this->chatId);
+                if($user['state'] != null){
+                    DB::table('users')->update($this->chatId, ['state' => null, 'state_data' => null]);
+                }
                 $this->showProductManagementMenu($messageId);
             } elseif ($callbackData === 'admin_add_product') {
                 $this->promptForProductCategory($messageId);
