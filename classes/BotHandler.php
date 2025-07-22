@@ -688,14 +688,14 @@ class BotHandler
             "chat_id" => $this->chatId,
             "text" => "--- پایان لیست محصولات ---",
             "reply_markup" => [
-                'inline_keyboard' => [[['text' => '⬅️ بازگشت و پاکسازی', 'callback_data' => 'admin_cleanup_products_and_return']]]
+                'inline_keyboard' => [[['text' => '⬅️ بازگشت ', 'callback_data' => 'admin_manage_products']]]
             ]
         ]);
         if (isset($finalMessage['result']['message_id'])) {
             $messageIdsToDelete[] = $finalMessage['result']['message_id'];
         }
 
-        DB::table('users')->update($this->chatId, ['product_messages_to_delete' => $messageIdsToDelete]);
+        DB::table('users')->update($this->chatId, ['message_ids' => $messageIdsToDelete]);
     }
 
     public function promptForProductCategory($messageId = null): void
