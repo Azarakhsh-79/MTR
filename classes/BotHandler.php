@@ -77,7 +77,10 @@ class BotHandler
                 $this->MainMenu();
                 return;
             }
-
+            if (strpos($state, 'editing_product_') === 0) {
+                $this->handleProductUpdate($state);
+                return;
+            }
 
             if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
@@ -164,10 +167,50 @@ class BotHandler
             if ($callbackData === 'main_menu') {
                 $this->MainMenu($messageId);
                 return;
+            } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
+                sscanf($callbackData, "admin_edit_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
+                if ($productId && $categoryId && $page) {
+                    $this->showProductEditMenu($productId, $messageId, $categoryId, $page);
+                }
+                return;
+            } elseif (strpos($callbackData, 'edit_field_') === 0) {
+                sscanf($callbackData, "edit_field_%[^_]_%d_%d_%d", $field, $productId, $categoryId, $page);
+                $fieldMap = [
+                    'name' => 'نام',
+                    'description' => 'توضیحات',
+                    'count' => 'تعداد',
+                    'price' => 'قیمت',
+                    'image_file_id' => 'عکس'
+                ];
+
+                if (!isset($fieldMap[$field])) {
+                    $this->Alert("خطا: فیلد نامشخص است.");
+                    return;
+                }
+
+                $stateData = json_encode(['product_id' => $productId, 'category_id' => $categoryId, 'page' => $page, 'message_id' => $messageId]);
+                DB::table('users')->update($this->chatId, [
+                    'state' => "editing_product_{$field}",
+                    'state_data' => $stateData
+                ]);
+
+                $promptText = "لطفاً مقدار جدید برای {$fieldMap[$field]} را ارسال کنید:";
+                if ($field === 'image_file_id') {
+                    $promptText .= "\n(برای حذف عکس فعلی دستور /remove_photo را ارسال کنید)";
+                }
+
+                $this->sendRequest("editMessageText", [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => $promptText,
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => "admin_edit_product_{$productId}_cat_{$categoryId}_page_{$page}"]]]
+                    ]
+                ]);
+                return;
             } else if (strpos($callbackData, 'list_products_cat_') === 0) {
-
                 sscanf($callbackData, "list_products_cat_%d_page_%d", $categoryId, $page);
-
                 if ($categoryId && $page) {
                     $this->showProductListByCategory($categoryId, $page, $messageId);
                 }
@@ -386,7 +429,7 @@ class BotHandler
                 }
 
                 $productText = $this->generateProductCardText($product);
-                
+
                 $originalKeyboard = [
                     'inline_keyboard' => [
                         [
@@ -793,74 +836,6 @@ class BotHandler
         }
     }
 
-
-
-    public function showProductList($messageId = null): void
-    {
-        if ($messageId) {
-            $this->sendRequest("editMessageText", [
-                "chat_id" => $this->chatId,
-                "message_id" => $messageId,
-                "text" => "⏳ در حال ارسال لیست محصولات...",
-                "reply_markup" => ['inline_keyboard' => []]
-            ]);
-        }
-
-        $allProducts = DB::table('products')->all();
-
-        if (empty($allProducts)) {
-            $this->sendRequest("editMessageText", [
-                "chat_id" => $this->chatId,
-                "message_id" => $messageId,
-                "text" => "هیچ محصولی برای نمایش وجود ندارد.",
-                "reply_markup" => [
-                    'inline_keyboard' => [[['text' => '⬅️ بازگشت', 'callback_data' => 'admin_manage_products']]]
-                ]
-            ]);
-            return;
-        }
-
-        $messageIdsToDelete = [$messageId];
-
-        foreach ($allProducts as $product) {
-
-            $productText = "📦 نام محصول: " . $product['name'] . "\n";
-            $productText .= "📝 توضیحات: " . $product['description'] . "\n";
-            $productText .= "💰 قیمت: " . number_format($product['price']) . " تومان";
-
-            $keyboard = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id']],
-                        ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
-                    ]
-                ]
-            ];
-
-            $res = $this->sendRequest("sendMessage", [
-                "chat_id" => $this->chatId,
-                "text" => $productText,
-                "parse_mode" => "Markdown",
-                "reply_markup" => $keyboard
-            ]);
-            if (isset($res['result']['message_id'])) {
-                $messageIdsToDelete[] = $res['result']['message_id'];
-            }
-        }
-
-        $finalMessage = $this->sendRequest("sendMessage", [
-            "chat_id" => $this->chatId,
-            "text" => "--- پایان لیست محصولات ---",
-            "reply_markup" => [
-                'inline_keyboard' => [[['text' => '⬅️ بازگشت ', 'callback_data' => 'admin_manage_products']]]
-            ]
-        ]);
-        if (isset($finalMessage['result']['message_id'])) {
-            $messageIdsToDelete[] = $finalMessage['result']['message_id'];
-        }
-
-        DB::table('users')->update($this->chatId, ['message_ids' => $messageIdsToDelete]);
-    }
     public function showProductListByCategory($categoryId, $page = 1, $messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
@@ -888,7 +863,7 @@ class BotHandler
             $productKeyboard = [
                 'inline_keyboard' => [
                     [
-                        ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id']],
+                        ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page],
                         ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
                     ]
                 ]
@@ -1207,6 +1182,107 @@ class BotHandler
         if (isset($res['result']['message_id'])) {
             $this->saveMessageId($this->chatId, $res['result']['message_id']);
         }
+    }
+    private function handleProductUpdate(string $state): void
+    {
+        $field = str_replace('editing_product_', '', $state);
+
+        $user = DB::table('users')->findById($this->chatId);
+        $stateData = json_decode($user['state_data'] ?? '{}', true);
+
+        $productId = $stateData['product_id'] ?? null;
+        $categoryId = $stateData['category_id'] ?? null;
+        $page = $stateData['page'] ?? null;
+        $messageId = $stateData['message_id'] ?? null;
+
+        if (!$productId || !$categoryId || !$page || !$messageId) {
+            $this->Alert("خطا در پردازش ویرایش. لطفاً دوباره تلاش کنید.");
+            DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
+            return;
+        }
+
+        $this->deleteMessage($this->messageId);
+
+        $updateData = [];
+        $value = null;
+
+        switch ($field) {
+            case 'name':
+                $value = trim($this->text);
+                if (empty($value)) {
+                    $this->Alert("نام نمی‌تواند خالی باشد.");
+                    return;
+                }
+                $updateData['name'] = $value;
+                break;
+            case 'description':
+                $updateData['description'] = trim($this->text);
+                break;
+            case 'count':
+            case 'price':
+                $value = trim($this->text);
+                if (!is_numeric($value) || $value < 0) {
+                    $this->Alert("مقدار وارد شده باید یک عدد معتبر باشد.");
+                    return;
+                }
+                $updateData[$field] = (int)$value;
+                break;
+            case 'image_file_id':
+                if (isset($this->message['photo'])) {
+                    $updateData['image_file_id'] = end($this->message['photo'])['file_id'];
+                } elseif ($this->text === '/remove_photo') {
+                    $updateData['image_file_id'] = null;
+                } else {
+                    $this->Alert("لطفاً یک عکس ارسال کنید یا از دستور /remove_photo استفاده کنید.");
+                    return;
+                }
+                break;
+        }
+
+        DB::table('products')->update($productId, $updateData);
+
+        DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
+        $this->Alert("✅ بروزرسانی با موفقیت انجام شد.");
+        $this->showProductEditMenu($productId, $messageId, $categoryId, $page);
+    }
+
+    public function showProductEditMenu(int $productId, int $messageId, int $categoryId, int $page): void
+    {
+        $product = DB::table('products')->findById($productId);
+        if (!$product) {
+            $this->Alert("خطا: محصول یافت نشد!");
+            $this->deleteMessage($messageId);
+            return;
+        }
+
+        $text = "شما در حال ویرایش محصول \"{$product['name']}\"هستید.\n\n";
+        $text .= "کدام بخش را می‌خواهید ویرایش کنید؟";
+
+        $keyboard = [
+            'inline_keyboard' => [
+
+                [
+                    ['text' => '✏️ ویرایش نام', 'callback_data' => "edit_field_name_{$productId}_{$categoryId}_{$page}"],
+                    ['text' => '✏️ ویرایش توضیحات', 'callback_data' => "edit_field_description_{$productId}_{$categoryId}_{$page}"]
+                ],
+                [
+                    ['text' => '✏️ ویرایش تعداد', 'callback_data' => "edit_field_count_{$productId}_{$categoryId}_{$page}"],
+                    ['text' => '✏️ ویرایش قیمت', 'callback_data' => "edit_field_price_{$productId}_{$categoryId}_{$page}"]
+                ],
+                [['text' => '🖼️ ویرایش عکس', 'callback_data' => "edit_field_image_file_id_{$productId}_{$categoryId}_{$page}"]],
+            ]
+        ];
+
+        $method = !empty($product['image_file_id']) ? "editMessageCaption" : "editMessageText";
+        $textOrCaptionKey = !empty($product['image_file_id']) ? "caption" : "text";
+
+        $this->sendRequest($method, [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId,
+            $textOrCaptionKey => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => $keyboard
+        ]);
     }
 
     private function createNewProduct(array $productData): void
