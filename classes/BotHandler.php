@@ -7,10 +7,7 @@ use Payment\ZarinpalPaymentHandler;
 use Bot\DB;     // <-- استفاده از مدیر دیتابیس جدید
 use Bot\Logger; // <-- اطمینان از وجود کلاس لاگر
 
-/**
- * کلاس اصلی برای مدیریت منطق ربات تلگرام.
- * این کلاس تمام درخواست‌ها، پیام‌ها و کالبک‌ها را مدیریت می‌کند.
- */
+
 class BotHandler
 {
     private $chatId;
@@ -81,7 +78,7 @@ class BotHandler
                 return;
             }
 
-           
+
             if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
                 return;
@@ -145,7 +142,6 @@ class BotHandler
                     "text" => "دستور نامشخص است. لطفاً با /start شروع کنید."
                 ]);
             }
-
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);
         }
@@ -167,6 +163,85 @@ class BotHandler
         try {
             if ($callbackData === 'main_menu') {
                 $this->MainMenu($messageId);
+                return;
+            }
+            if (strpos($callbackData, 'product_creation_back_to_') === 0) {
+                $targetState = str_replace('product_creation_back_to_', '', $callbackData);
+                DB::table('users')->update($this->chatId, ['state' => 'adding_product_' . $targetState]);
+
+                $text = "";
+                $reply_markup = [];
+
+                switch ('adding_product_' . $targetState) {
+                    case 'adding_product_name':
+                        $text = "لطفاً نام محصول را مجدداً وارد کنید:";
+                        $reply_markup = [
+                            'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                        ];
+                        break;
+                    case 'adding_product_description':
+                        $text = "لطفاً توضیحات محصول را مجدداً وارد کنید:";
+                        $reply_markup = [
+                            'inline_keyboard' => [
+                                [
+                                    ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_name'],
+                                    ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                                ]
+                            ]
+                        ];
+                        break;
+                    case 'adding_product_count':
+                        $text = "لطفاً تعداد موجودی محصول را مجدداً وارد کنید (فقط عدد انگلیسی):";
+                        $reply_markup = [
+                            'inline_keyboard' => [
+                                [
+                                    ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_description'],
+                                    ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                                ]
+                            ]
+                        ];
+                        break;
+                    case 'adding_product_price':
+                        $text = "لطفاً قیمت محصول را مجدداً وارد کنید (فقط عدد انگلیسی و به تومان):";
+                        $reply_markup = [
+                            'inline_keyboard' => [
+                                [
+                                    ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_count'],
+                                    ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                                ]
+                            ]
+                        ];
+                        break;
+                }
+
+                $this->sendRequest("editMessageText", [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => $text,
+                    'reply_markup' => $reply_markup
+                ]);
+                return;
+            } else if ($callbackData === 'product_confirm_save') {
+                $user = DB::table('users')->findById($this->chatId);
+                $stateData = json_decode($user['state_data'] ?? '{}', true);
+
+                $this->createNewProduct($stateData);
+
+                DB::table('users')->unsetKey($this->chatId, 'state');
+                DB::table('users')->unsetKey($this->chatId, 'state_data');
+
+                $this->Alert("✅ محصول با موفقیت ذخیره شد!");
+                $this->deleteMessage($messageId); // پیام پیش‌نمایش را حذف کن
+                $this->showProductManagementMenu(null); // منو را به عنوان پیام جدید بفرست
+
+                return;
+            } elseif ($callbackData === 'product_confirm_cancel') {
+                DB::table('users')->unsetKey($this->chatId, 'state');
+                DB::table('users')->unsetKey($this->chatId, 'state_data');
+
+                $this->Alert("❌ عملیات افزودن محصول لغو شد.");
+                $this->deleteMessage($messageId);
+                $this->showProductManagementMenu(null);
                 return;
             } elseif ($callbackData === 'admin_panel_entry') {
                 $this->showAdminMainMenu($messageId);
@@ -239,7 +314,7 @@ class BotHandler
                 return;
             } elseif ($callbackData === 'admin_manage_products') {
                 $user = DB::table('users')->findById($this->chatId);
-                if($user['state'] != null){
+                if ($user['state'] != null) {
                     DB::table('users')->update($this->chatId, ['state' => null, 'state_data' => null]);
                 }
                 $this->showProductManagementMenu($messageId);
@@ -735,58 +810,90 @@ class BotHandler
             ]);
         }
     }
-    
+
     private function handleProductCreationSteps(): void
     {
         $user = DB::table('users')->findById($this->chatId);
         $state = $user['state'] ?? null;
-        $stateData = json_decode( $user['state_data'] ?? '{}', true);
+        $stateData = json_decode($user['state_data'] ?? '{}', true);
         $messageId = $this->getMessageId($this->chatId);
+
         switch ($state) {
-            // --- مرحله ۱: پرسیدن نام محصول ---
             case 'adding_product_name':
                 $productName = trim($this->text);
                 $this->deleteMessage($this->messageId);
                 if (empty($productName)) {
                     $this->Alert("⚠️ نام محصول نمی‌تواند خالی باشد.");
-                    return; 
+                    return;
                 }
-
-                $stateData['name'] = $productName; 
-
+                $stateData['name'] = $productName;
                 DB::table('users')->update($this->chatId, [
                     'state' => 'adding_product_description',
                     'state_data' => json_encode($stateData)
                 ]);
-
                 $this->sendRequest('editMessageText', [
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
-                    'text' => "✅ نام محصول ثبت شد.\n\nحالا لطفاً توضیحات محصول را وارد کنید :",
+                    'text' => "✅ نام محصول ثبت شد: {$productName}\n\nحالا لطفاً توضیحات محصول را وارد کنید:",
                     'parse_mode' => 'Markdown',
                     'reply_markup' => [
-                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                        'inline_keyboard' => [
+                            [
+                                ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_name'],
+                                ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                            ]
+                        ]
                     ]
                 ]);
-                    
                 break;
 
             case 'adding_product_description':
-                $stateData['description'] = trim($this->text); 
+                $stateData['description'] = trim($this->text);
                 $this->deleteMessage($this->messageId);
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'adding_product_count',
+                    'state_data' => json_encode($stateData)
+                ]);
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ توضیحات ثبت شد.\n\nحالا لطفاً تعداد موجودی محصول را وارد کنید (فقط عدد انگلیسی):",
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [
+                            [
+                                ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_description'],
+                                ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                            ]
+                        ]
+                    ]
+                ]);
+                break;
 
+            case 'adding_product_count':
+                $count = trim($this->text);
+                $this->deleteMessage($this->messageId);
+                if (!is_numeric($count) || $count < 0) {
+                    $this->Alert("⚠️ لطفاً یک تعداد معتبر وارد کنید.");
+                    return;
+                }
+                $stateData['count'] = (int)$count;
                 DB::table('users')->update($this->chatId, [
                     'state' => 'adding_product_price',
                     'state_data' => json_encode($stateData)
                 ]);
-
                 $this->sendRequest('editMessageText', [
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
-                    'text' => "✅ توضیحات محصول ثبت شد.\n\nحالا لطفاً قیمت محصول را وارد کنید (فقط عدد انگلیسی و به تومان):",
+                    'text' => "✅ تعداد ثبت شد: {$count} عدد\n\nحالا لطفاً قیمت محصول را وارد کنید (به تومان):",
                     'parse_mode' => 'Markdown',
                     'reply_markup' => [
-                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                        'inline_keyboard' => [
+                            [
+                                ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_count'],
+                                ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                            ]
+                        ]
                     ]
                 ]);
                 break;
@@ -795,56 +902,95 @@ class BotHandler
                 $price = trim($this->text);
                 $this->deleteMessage($this->messageId);
                 if (!is_numeric($price) || $price < 0) {
-                    $this->Alert("⚠️ لطفاً یک قیمت معتبر وارد کنید (فقط عدد انگلیسی).");
-                     return; 
+                    $this->Alert("⚠️ لطفاً یک قیمت معتبر وارد کنید.");
+                    return;
                 }
-
-                $stateData['price'] = (int)$price; 
-
+                $stateData['price'] = (int)$price;
                 DB::table('users')->update($this->chatId, [
                     'state' => 'adding_product_photo',
                     'state_data' => json_encode($stateData)
                 ]);
-
                 $this->sendRequest('editMessageText', [
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
-                    'text' => "✅ قیمت محصول ثبت شد.\n\nحالا لطفاً عکس محصول را ارسال کنید (می‌توانید از دستور /skip برای رد کردن این مرحله استفاده کنید):",
+                    'text' => "✅ قیمت ثبت شد: " . number_format($price) . " تومان\n\nحالا لطفاً عکس محصول را ارسال کنید (برای رد کردن از دستور /skip استفاده کنید):",
                     'parse_mode' => 'Markdown',
                     'reply_markup' => [
-                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                        'inline_keyboard' => [
+                            [
+                                ['text' => '↪️ مرحله قبل', 'callback_data' => 'product_creation_back_to_price'],
+                                ['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']
+                            ]
+                        ]
                     ]
                 ]);
-                
                 break;
 
             case 'adding_product_photo':
                 $this->deleteMessage($this->messageId);
+
                 if (isset($this->message['photo'])) {
                     $stateData['image_file_id'] = end($this->message['photo'])['file_id'];
                 } elseif ($this->text !== '/skip') {
-                    $this->Alert("⚠️ لطفاً یک عکس محصول ارسال کنید یا از دستور /skip برای رد کردن این مرحله استفاده کنید.");
+                    $this->Alert("⚠️ لطفاً یک عکس ارسال کنید یا از دستور /skip استفاده کنید.");
                     return;
+                } else {
+                    $stateData['image_file_id'] = null;
                 }
-                $this->sendRequest('editMessageText', [
-                    'chat_id' => $this->chatId,
-                    'message_id' => $messageId,
-                    'text' => "✅ محصول جدید با موفقیت ایجاد شد!",
-                    'parse_mode' => 'Markdown',
-                    'reply_markup' => [
-                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
-                    ]
+
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'adding_product_confirmation',
+                    'state_data' => json_encode($stateData)
                 ]);
-
-                $this->createNewProduct($stateData);
-
-                DB::table('users')->unsetKey($this->chatId, 'state');
-                DB::table('users')->unsetKey($this->chatId, 'state_data');
-
-                $this->showProductManagementMenu($messageId); 
+                $this->deleteMessage($messageId);
+                $this->showConfirmationPreview();
                 break;
         }
     }
+    private function showConfirmationPreview(): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        $stateData = json_decode($user['state_data'] ?? '{}', true);
+
+        // ساخت متن پیش نمایش
+        $previewText = " لطفاً اطلاعات زیر را بررسی و تایید کنید:\n\n";
+        $previewText .= "📦 نام محصول: " . ($stateData['name'] ?? 'ثبت نشده') . "\n";
+        $previewText .= "📝 توضیحات: " . ($stateData['description'] ?? 'ثبت نشده') . "\n";
+        $previewText .= "🔢 موجودی: " . ($stateData['count'] ?? '۰') . " عدد\n";
+        $previewText .= "💰 قیمت: " . number_format($stateData['price'] ?? 0) . " تومان\n\n";
+        $previewText .= "در صورت صحت اطلاعات، دکمه \"تایید و ذخیره\" را بزنید.";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '✅ تایید و ذخیره', 'callback_data' => 'product_confirm_save'],
+                    ['text' => '❌ لغو عملیات', 'callback_data' => 'product_confirm_cancel']
+                ]
+            ]
+        ];
+
+        if (!empty($stateData['image_file_id'])) {
+            $res = $this->sendRequest('sendPhoto', [
+                'chat_id' => $this->chatId,
+                'photo' => $stateData['image_file_id'],
+                'caption' => $previewText,
+                'parse_mode' => 'Markdown',
+                'reply_markup' => $keyboard
+            ]);
+        } else {
+            $res = $this->sendRequest('sendMessage', [
+                'chat_id' => $this->chatId,
+                'text' => $previewText,
+                'parse_mode' => 'Markdown',
+                'reply_markup' => $keyboard
+            ]);
+        }
+
+        if (isset($res['result']['message_id'])) {
+            $this->saveMessageId($this->chatId, $res['result']['message_id']);
+        }
+    }
+
     private function createNewProduct(array $productData): void
     {
         $products = DB::table('products')->all();
@@ -856,6 +1002,7 @@ class BotHandler
             'description' => $productData['description'] ?? '',
             'price' => $productData['price'],
             'category_id' => $productData['category_id'],
+            'count' => $productData['count'] ?? 0,
             'image_file_id' => $productData['image_file_id'] ?? null,
             'is_active' => true,
         ];
