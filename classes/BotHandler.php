@@ -413,6 +413,37 @@ class BotHandler
                 }
 
                 return;
+            } elseif (str_starts_with($callbackData, 'edit_cart_increase_')) {
+                $productId = (int)str_replace('edit_cart_increase_', '', $callbackData);
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+                if (isset($cart[$productId])) {
+                    $cart[$productId]++;
+                    DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+                    $this->refreshCartItemCard($productId, $messageId);
+                }
+                return;
+            } elseif (str_starts_with($callbackData, 'edit_cart_decrease_')) {
+                $productId = (int)str_replace('edit_cart_decrease_', '', $callbackData);
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+                if (isset($cart[$productId])) {
+                    $cart[$productId]--;
+                    if ($cart[$productId] <= 0) unset($cart[$productId]);
+                    DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+                    $this->refreshCartItemCard($productId, $messageId);
+                }
+                return;
+            } elseif (str_starts_with($callbackData, 'edit_cart_remove_')) {
+                $productId = (int)str_replace('edit_cart_remove_', '', $callbackData);
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+                unset($cart[$productId]);
+                DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+                $this->Alert("محصول از سبد خرید شما حذف شد.", false);
+                $this->deleteMessage($messageId);
+                
+                return;
             } elseif (str_starts_with($callbackData, 'cart_increase_')) {
                 $productId = (int)str_replace('cart_increase_', '', $callbackData);
                 $user = DB::table('users')->findById($this->chatId);
@@ -1943,6 +1974,7 @@ class BotHandler
 
     public function showAboutUs(): void
     {
+        id:
         $text = "🤖 *درباره توسعه‌دهنده ربات*\n\n";
         $text .= "این ربات یک *نمونه‌کار حرفه‌ای* در زمینه طراحی و توسعه ربات‌های فروشگاهی در تلگرام است که توسط *امیر سلیمانی* طراحی و برنامه‌نویسی شده است.\n\n";
         $text .= "✨ *ویژگی‌های برجسته ربات:*\n";
@@ -1996,12 +2028,13 @@ class BotHandler
                 $keyboard = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
+
+                            ['text' => '➕', 'callback_data' => "edit_cart_increase_{$productId}"],
                             ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
-                            ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
+                            ['text' => '➖', 'callback_data' => "edit_cart_decrease_{$productId}"]
                         ],
                         [
-                            ['text' => '🗑 حذف کامل از سبد', 'callback_data' => "cart_remove_{$productId}"]
+                            ['text' => '🗑 حذف کامل از سبد', 'callback_data' => "edit_cart_remove_{$productId}"]
                         ]
                     ]
                 ];
@@ -2038,5 +2071,38 @@ class BotHandler
         }
 
         DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
+    }
+
+    private function refreshCartItemCard(int $productId, int $messageId): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        $cart = json_decode($user['cart'] ?? '{}', true);
+
+        if (!isset($cart[$productId])) {
+            $this->deleteMessage($messageId);
+            $this->Alert("محصول از سبد شما حذف شد.", false);
+            return;
+        }
+
+        $quantity = $cart[$productId];
+
+       
+        $newKeyboard = [
+            [
+
+                ['text' => '➕', 'callback_data' => "edit_cart_increase_{$productId}"],
+                ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
+                ['text' => '➖', 'callback_data' => "edit_cart_decrease_{$productId}"]
+            ],
+            [
+                ['text' => '🗑 حذف کامل از سبد', 'callback_data' => "edit_cart_remove_{$productId}"]
+            ]
+        ];
+
+        $this->sendRequest('editMessageReplyMarkup', [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId,
+            'reply_markup' => $newKeyboard
+        ]);
     }
 }
