@@ -188,7 +188,7 @@ class BotHandler
                     $this->deleteMessages($user['message_ids']);
                 }
                 $this->deleteMessage($this->messageId);
-                $this->MainMenu($messageId);
+                $this->MainMenu();
                 return;
             }elseif ($callbackData === 'nope') {
                 return;
