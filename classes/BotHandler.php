@@ -2218,8 +2218,7 @@ class BotHandler
 
         $storeName = $settings['store_name'] ?? 'تعیین نشده ❌';
         $mainMenuText = $settings['main_menu_text'] ?? 'تعیین نشده ❌';
-        $mainMenuPreview = mb_strlen($mainMenuText) > 35 ? mb_substr($mainMenuText, 0, 35) . '...' : $mainMenuText;
-
+       
         $deliveryPrice = number_format($settings['delivery_price'] ?? 0) . ' تومان';
         $taxPercent = ($settings['tax_percent'] ?? 0) . '٪';
         $discountFixed = number_format($settings['discount_fixed'] ?? 0) . ' تومان';
@@ -2231,15 +2230,15 @@ class BotHandler
         $storeRules = !empty($settings['store_rules']) ? '✅ تنظیم شده' : '❌ تنظیم نشده';
 
         $text = "⚙️ <b>مدیریت تنظیمات ربات فروشگاه</b>\n\n";
-        $text .= "🛒 <b>نام فروشگاه:</b> <code>{$storeName}</code>\n";
-        $text .= "🧾 <b>متن منوی اصلی:</b> <code>{$mainMenuPreview}</code>\n";
-        $text .= "🚚 <b>هزینه ارسال:</b> <code>{$deliveryPrice}</code>\n";
-        $text .= "📊 <b>مالیات:</b> <code>{$taxPercent}</code>\n";
-        $text .= "🎁 <b>تخفیف ثابت:</b> <code>{$discountFixed}</code>\n\n";
+        $text .= "🛒 <b>نام فروشگاه:</b> {$storeName}\n";
+        $text .= "🧾 <b>متن منوی اصلی:</b> {$mainMenuText}\n";
+        $text .= "🚚 <b>هزینه ارسال:</b> {$deliveryPrice}\n";
+        $text .= "📊 <b>مالیات:</b> {$taxPercent}\n";
+        $text .= "🎁 <b>تخفیف ثابت:</b>{$discountFixed}\n\n";
 
-        $text .= "💳 <b>شماره کارت:</b> <code>{$cardNumber}</code>\n";
-        $text .= "👤 <b>صاحب حساب:</b> <code>{$cardHolderName}</code>\n";
-        $text .= "📞 <b>آیدی پشتیبانی:</b> <code>{$supportId}</code>\n";
+        $text .= "💳 <b>شماره کارت:</b> {$cardNumber}\n";
+        $text .= "👤 <b>صاحب حساب:</b> {$cardHolderName}\n";
+        $text .= "📞 <b>آیدی پشتیبانی:</b> {$supportId}\n";
         $text .= "📜 <b>قوانین فروشگاه:</b> {$storeRules}\n";
 
         $keyboard = [
