@@ -73,7 +73,7 @@ class BotHandler
 
         try {
             if (str_starts_with($this->text, "/start")) {
-
+                $this->deleteMessage($this->messageId);
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
 
@@ -184,7 +184,7 @@ class BotHandler
             } elseif ($callbackData === 'nope') {
                 return;
             } elseif ($callbackData === 'activate_inline_search') {
-                $this->activateInlineSearch();
+                $this->activateInlineSearch($messageId);
                 return;
             } elseif ($callbackData === 'show_favorites') {
                 $this->showFavoritesList(1, $messageId);
@@ -402,7 +402,6 @@ class BotHandler
                     DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
                     $this->refreshProductCard($productId, $messageId);
                     $this->Alert("به سبد خرید اضافه شد", false);
-
                 }
                 return;
             } elseif (str_starts_with($callbackData, 'cart_decrease_')) {
@@ -415,11 +414,10 @@ class BotHandler
                     if ($cart[$productId] <= 0) {
                         unset($cart[$productId]);
                     }
-                    
+
                     DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
                     $this->refreshProductCard($productId, $messageId);
                     $this->Alert("از سبد خرید کم شد", false);
-
                 }
                 return;
             } elseif (str_starts_with($callbackData, 'category_')) {
@@ -1794,7 +1792,7 @@ class BotHandler
         } else {
             $keyboardRows[] = [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $productId]];
         }
-        if($messageId == null){
+        if ($messageId == null) {
             $keyboardRows[] = [['text' => 'منوی اصلی', 'callback_data' => 'main_menu']];
         }
 
@@ -1817,25 +1815,43 @@ class BotHandler
             }
         }
     }
-    public function activateInlineSearch(): void
+    public function activateInlineSearch($messageId = null): void
     {
         $text = "🔍 برای جستجوی محصولات در این چت، روی دکمه زیر کلیک کرده و سپس عبارت مورد نظر خود را تایپ کنید:";
         $buttonText = "شروع جستجو در این چت 🔍";
 
-        $this->sendRequest("sendMessage", [
-            "chat_id" => $this->chatId,
-            "text" => $text,
-            "reply_markup" => [
-                "inline_keyboard" => [
-                    [
+        if ($messageId == null) {
+            $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => $text,
+                "reply_markup" => [
+                    "inline_keyboard" => [
                         [
-                            "text" => $buttonText,
-                            "switch_inline_query_current_chat" => ""
+                            [
+                                "text" => $buttonText,
+                                "switch_inline_query_current_chat" => ""
+                            ]
                         ]
                     ]
                 ]
-            ]
-        ]);
+            ]);
+        } else {
+            $this->sendRequest("editMessageText", [
+                "chat_id" => $this->chatId,
+                'message_id' => $messageId,
+                "text" => $text,
+                "reply_markup" => [
+                    "inline_keyboard" => [
+                        [
+                            [
+                                "text" => $buttonText,
+                                "switch_inline_query_current_chat" => ""
+                            ]
+                        ]
+                    ]
+                ]
+            ]);
+        }
     }
 
     public function showSingleProduct(int $productId): void
