@@ -331,6 +331,88 @@ class BotHandler
                 $this->promptUserForCategorySelection($messageId);
             } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
                 $productId = str_replace('admin_edit_product_', '', $callbackData);
+            } elseif (strpos($callbackData, 'admin_delete_product_') === 0) {
+                $productId = str_replace('admin_delete_product_', '', $callbackData);
+                $product = DB::table('products')->findById($productId);
+
+                if (!$product) {
+                    $this->Alert("خطا: محصول یافت نشد!");
+                    return;
+                }
+
+                $confirmationText = "❓ آیا از حذف محصول \"{$product['name']}\" مطمئن هستید؟ این عمل غیرقابل بازگشت است.";
+                $confirmationKeyboard = [
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '✅ بله، حذف کن', 'callback_data' => 'confirm_delete_product_' . $productId],
+                            ['text' => '❌ خیر، انصراف', 'callback_data' => 'cancel_delete_product_' . $productId]
+                        ]
+                    ]
+                ];
+
+                if (!empty($product['image_file_id'])) {
+                    $this->sendRequest("editMessageCaption", [
+                        'chat_id' => $this->chatId,
+                        'message_id' => $messageId,
+                        'caption' => $confirmationText,
+                        'reply_markup' => $confirmationKeyboard
+                    ]);
+                } else {
+                    $this->sendRequest("editMessageText", [
+                        'chat_id' => $this->chatId,
+                        'message_id' => $messageId,
+                        'text' => $confirmationText,
+                        'reply_markup' => $confirmationKeyboard
+                    ]);
+                }
+                return;
+            } elseif (strpos($callbackData, 'confirm_delete_product_') === 0) {
+                $productId = str_replace('confirm_delete_product_', '', $callbackData);
+
+                DB::table('products')->delete($productId);
+                $this->deleteMessage($messageId);
+                $this->Alert("✅ محصول با موفقیت حذف شد.");
+                return;
+
+                // ... داخل متد handleCallbackQuery
+            } elseif (strpos($callbackData, 'cancel_delete_product_') === 0) {
+                $productId = str_replace('cancel_delete_product_', '', $callbackData);
+                $product = DB::table('products')->findById($productId);
+
+                if (!$product) {
+                    $this->Alert("خطا: محصول یافت نشد!");
+                    $this->deleteMessage($messageId); // پیام را پاک می‌کنیم چون محصولی وجود ندارد
+                    return;
+                }
+
+                $productText = $this->generateProductCardText($product);
+                
+                $originalKeyboard = [
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id']],
+                            ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                        ]
+                    ]
+                ];
+                if (!empty($product['image_file_id'])) {
+                    $this->sendRequest("editMessageCaption", [
+                        'chat_id' => $this->chatId,
+                        'message_id' => $messageId,
+                        'caption' => $productText,
+                        'parse_mode' => 'Markdown',
+                        'reply_markup' => $originalKeyboard
+                    ]);
+                } else {
+                    $this->sendRequest("editMessageText", [
+                        'chat_id' => $this->chatId,
+                        'message_id' => $messageId,
+                        'text' => $productText,
+                        'parse_mode' => 'Markdown',
+                        'reply_markup' => $originalKeyboard
+                    ]);
+                }
+                return;
             } elseif ($callbackData === 'admin_bot_settings') {
                 $this->Alert("این بخش هنوز آماده نیست.");
             } elseif ($callbackData === 'admin_reports') {
@@ -802,11 +884,7 @@ class BotHandler
         $newMessageIds = [];
 
         foreach ($productsOnPage as $product) {
-            $productText = "📦 نام: " . $product['name'] . "\n";
-            $productText .= "📝 توضیحات: " . ($product['description'] ?? '-') . "\n";
-            $productText .= "🔢 موجودی: " . ($product['count'] ?? 0) . " عدد\n";
-            $productText .= "💰 قیمت: " . number_format($product['price']) . " تومان";
-
+            $productText = $this->generateProductCardText($product);
             $productKeyboard = [
                 'inline_keyboard' => [
                     [
@@ -1038,6 +1116,16 @@ class BotHandler
                 $this->showConfirmationPreview();
                 break;
         }
+    }
+
+    private function generateProductCardText(array $product): string
+    {
+        $text = "📦 نام: " . $product['name'] . "\n";
+        $text .= "📝 توضیحات: " . ($product['description'] ?? '-') . "\n";
+        $text .= "🔢 موجودی: " . ($product['count'] ?? 0) . " عدد\n";
+        $text .= "💰 قیمت: " . number_format($product['price']) . " تومان";
+
+        return $text;
     }
     public function promptUserForCategorySelection($messageId = null): void
     {
