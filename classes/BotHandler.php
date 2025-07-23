@@ -880,7 +880,7 @@ class BotHandler
         $categoryButtons[] = $userActionButtons;
         $categoryButtons[] = [
             ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search'],
-            ['text' => '📞 پشتیبانی', 'callback_data' => 'show_support']
+            ['text' => '📞 پشتیبانی', 'callback_data' => 'contact_support']
         ];
         $categoryButtons[] = [
             ['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules'],
@@ -891,8 +891,6 @@ class BotHandler
             $channelUsername = str_replace('@', '', $channelId);
             $categoryButtons[] = [['text' => '📢 عضویت در کانال فروشگاه', 'url' => "https://t.me/{$channelUsername}"]];
         }
-
-        $categoryButtons[] = [['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules']];
 
         $user = DB::table('users')->findById($this->chatId);
         if ($user && !empty($user['is_admin'])) {
