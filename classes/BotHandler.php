@@ -169,7 +169,7 @@ class BotHandler
                 DB::table('settings')->set($key, $value);
 
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
-            
+
                 $userData = DB::table('users')->findById($this->chatId);
                 $stateData = json_decode($userData['state_data'] ?? '{}', true);
                 $messageId = $stateData['message_id'] ?? null;
@@ -2218,30 +2218,31 @@ class BotHandler
     {
         $settings = DB::table('settings')->all();
 
-        $storeName = $settings['store_name'] ?? 'تعیین نشده';
-        $mainMenuText = $settings['main_menu_text'] ?? 'تعیین نشده';
+        $storeName = $settings['store_name'] ?? 'تعیین نشده ❌';
+        $mainMenuText = $settings['main_menu_text'] ?? 'تعیین نشده ❌';
+        $mainMenuPreview = mb_strlen($mainMenuText) > 35 ? mb_substr($mainMenuText, 0, 35) . '...' : $mainMenuText;
+
         $deliveryPrice = number_format($settings['delivery_price'] ?? 0) . ' تومان';
-        $taxPercent = ($settings['tax_percent'] ?? 0) . ' درصد';
+        $taxPercent = ($settings['tax_percent'] ?? 0) . '٪';
         $discountFixed = number_format($settings['discount_fixed'] ?? 0) . ' تومان';
-        $cardNumber = $settings['card_number'] ?? 'وارد نشده';
-        $cardHolderName = $settings['card_holder_name'] ?? 'وارد نشده';
-        $supportId = $settings['support_id'] ?? 'وارد نشده';
+
+        $cardNumber = $settings['card_number'] ?? 'وارد نشده ❌';
+        $cardHolderName = $settings['card_holder_name'] ?? 'وارد نشده ❌';
+        $supportId = $settings['support_id'] ?? 'وارد نشده ❌';
+
         $storeRules = !empty($settings['store_rules']) ? '✅ تنظیم شده' : '❌ تنظیم نشده';
 
+        $text = "⚙️ <b>مدیریت تنظیمات ربات فروشگاه</b>\n\n";
+        $text .= "🛒 <b>نام فروشگاه:</b> <code>{$storeName}</code>\n";
+        $text .= "🧾 <b>متن منوی اصلی:</b> <code>{$mainMenuPreview}</code>\n";
+        $text .= "🚚 <b>هزینه ارسال:</b> <code>{$deliveryPrice}</code>\n";
+        $text .= "📊 <b>مالیات:</b> <code>{$taxPercent}</code>\n";
+        $text .= "🎁 <b>تخفیف ثابت:</b> <code>{$discountFixed}</code>\n\n";
 
-        $text = "⚙️ <b>تنظیمات ربات</b>\n\n";
-        $text .= "در این بخش می‌توانید مقادیر اصلی فروشگاه خود را مدیریت کنید.\n\n";
-        $text .= "<b>مقادیر فعلی:</b>\n";
-        $text .= "- نام فروشگاه: <b>{$storeName}</b>\n";
-        $text .= "- متن منوی اصلی: <b>{$mainMenuText}</b>\n";
-        $text .= "- هزینه ارسال: <b>{$deliveryPrice}</b>\n";
-        $text .= "- مالیات: <b>{$taxPercent}</b>\n";
-        $text .= "- تخفیف ثابت: <b>{$discountFixed}</b>\n";
-        $text .= "💳 شماره کارت: <b>{$cardNumber}</b>\n";
-        $text .= "👤 نام صاحب حساب: <b>{$cardHolderName}</b>\n";
-        $text .= "📞 آیدی پشتیبانی: <b>{$supportId}</b>\n";
-        $text .= "📜 قوانین فروشگاه: <b>{$storeRules}</b>\n";
-
+        $text .= "💳 <b>شماره کارت:</b> <code>{$cardNumber}</code>\n";
+        $text .= "👤 <b>صاحب حساب:</b> <code>{$cardHolderName}</code>\n";
+        $text .= "📞 <b>آیدی پشتیبانی:</b> <code>{$supportId}</code>\n";
+        $text .= "📜 <b>قوانین فروشگاه:</b> {$storeRules}\n";
 
         $keyboard = [
             'inline_keyboard' => [
@@ -2277,17 +2278,15 @@ class BotHandler
             'reply_markup' => json_encode($keyboard)
         ];
 
-        if ($messageId) {
-            $data['message_id'] = $messageId;
-            $res = $this->sendRequest("editMessageText", $data);
-        } else {
-            $res = $this->sendRequest("sendMessage", $data);
-        }
+        $res = $messageId
+            ? $this->sendRequest("editMessageText", array_merge($data, ['message_id' => $messageId]))
+            : $this->sendRequest("sendMessage", $data);
 
         if (isset($res['result']['message_id'])) {
             $this->saveMessageId($this->chatId, $res['result']['message_id']);
         }
     }
+
     public function showStoreRules($messageId = null): void
     {
         $settings = DB::table('settings')->all();
