@@ -103,6 +103,9 @@ class BotHandler
             } elseif (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
                 return;
+            } elseif (in_array($state, ['entering_shipping_name', 'entering_shipping_phone', 'entering_shipping_address'])) {
+                $this->handleShippingInfoSteps();
+                return;
             } elseif (str_starts_with($state, 'editing_category_name_')) {
                 $categoryName = trim($this->text);
                 $this->deleteMessage($this->messageId);
@@ -155,7 +158,7 @@ class BotHandler
                     $this->MainMenu($messageId ?? null);
                 }
                 return;
-             } elseif (str_starts_with($state, 'editing_setting_')) {
+            } elseif (str_starts_with($state, 'editing_setting_')) {
                 $key = str_replace('editing_setting_', '', $state);
                 $value = trim($this->text);
                 $this->deleteMessage($this->messageId);
@@ -165,14 +168,14 @@ class BotHandler
                     $this->Alert("مقدار وارد شده باید یک عدد معتبر باشد.");
                     return;
                 }
-                
+
                 $userData = DB::table('users')->findById($this->chatId);
                 $stateData = json_decode($userData['state_data'] ?? '{}', true);
                 $messageId = $stateData['message_id'] ?? null;
 
                 DB::table('settings')->set($key, $value);
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
-                
+
                 $this->showBotSettingsMenu($messageId);
                 return;
             }
@@ -202,7 +205,6 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
-            
             } elseif ($callbackData === 'contact_support') {
                 $this->showSupportInfo($messageId);
                 return;
@@ -279,6 +281,15 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['cart' => '[]']);
                 $this->Alert("🗑 سبد خرید شما با موفقیت خالی شد.");
                 $this->showCart($messageId);
+                return;
+            } elseif ($callbackData === 'complete_shipping_info' || $callbackData === 'edit_shipping_info') {
+                DB::table('users')->update($this->chatId, ['state' => 'entering_shipping_name', 'state_data' => '[]']);
+                $this->sendRequest("editMessageText", [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "لطفاً نام و نام خانوادگی کامل گیرنده را وارد کنید:",
+                    'reply_markup' => ['inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'show_cart']]]]
+                ]);
                 return;
             } elseif ($callbackData === 'checkout') {
                 $this->Alert("این بخش هنوز آماده نیست. در حال انتقال به درگاه پرداخت...");
@@ -1027,6 +1038,7 @@ class BotHandler
         }
 
         $settings = DB::table('settings')->all();
+        $shippingInfoComplete = !empty($user['shipping_name']) && !empty($user['shipping_phone']) && !empty($user['shipping_address']);
 
         $storeName     = $settings['store_name'] ?? 'فروشگاه من';
         $deliveryCost  = (int)($settings['delivery_price'] ?? 0);
@@ -1039,6 +1051,13 @@ class BotHandler
         $text = "🧾 <b>فاکتور خرید از {$storeName}</b>\n";
         $text .= "📆 تاریخ: {$date}\n";
         $text .= "🆔 شماره فاکتور: {$invoiceId}\n\n";
+
+        if ($shippingInfoComplete) {
+            $text .= "🚚 <b>مشخصات گیرنده:</b>\n";
+            $text .= "👤 نام: {$user['shipping_name']}\n";
+            $text .= "📞 تلفن: {$user['shipping_phone']}\n";
+            $text .= "📍 آدرس: {$user['shipping_address']}\n\n";
+        }
 
         $text .= "<b>📋 لیست اقلام:</b>\n";
         $allProducts = DB::table('products')->all();
@@ -1065,16 +1084,21 @@ class BotHandler
         $text .= "📊 مالیات ({$taxPercent}%): " . number_format($taxAmount) . " تومان\n";
         $text .= "💰 <b>مبلغ نهایی قابل پرداخت:</b> <b>" . number_format($grandTotal) . "</b> تومان";
 
-        $keyboard = [
-            'inline_keyboard' => [
-                [['text' => '💳 پرداخت نهایی', 'callback_data' => 'checkout']],
-                [
-                    ['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'],
-                    ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart'],
-                ],
-                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
-            ]
-        ];
+
+        $keyboardRows = [];
+        if ($shippingInfoComplete) {
+
+            $keyboardRows[] = [['text' => '💳 پرداخت نهایی', 'callback_data' => 'checkout']];
+            $keyboardRows[] = [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'], ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart']];
+            $keyboardRows[] = [['text' => '📝 ویرایش اطلاعات ارسال', 'callback_data' => 'edit_shipping_info']];
+        } else {
+            $keyboardRows[] = [['text' => '📝 تکمیل اطلاعات ارسال', 'callback_data' => 'complete_shipping_info']];
+            $keyboardRows[] = [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'], ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart']];
+        }
+
+        $keyboardRows[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
+        $keyboard = ['inline_keyboard' => $keyboardRows];
+
 
         $this->sendRequest("sendMessage", [
             'chat_id' => $this->chatId,
@@ -2231,7 +2255,7 @@ class BotHandler
 
         $storeName = $settings['store_name'] ?? 'تعیین نشده ❌';
         $mainMenuText = $settings['main_menu_text'] ?? 'تعیین نشده ❌';
-       
+
         $deliveryPrice = number_format($settings['delivery_price'] ?? 0) . ' تومان';
         $taxPercent = ($settings['tax_percent'] ?? 0) . '٪';
         $discountFixed = number_format($settings['discount_fixed'] ?? 0) . ' تومان';
@@ -2275,7 +2299,7 @@ class BotHandler
                     ['text' => '✏️ شماره کارت', 'callback_data' => 'edit_setting_card_number'],
                     ['text' => '✏️ نام صاحب حساب', 'callback_data' => 'edit_setting_card_holder_name']
                 ],
-                 [
+                [
                     ['text' => '✏️ آیدی پشتیبانی', 'callback_data' => 'edit_setting_support_id'],
                     ['text' => '✏️ آیدی کانال', 'callback_data' => 'edit_setting_channel_id']
                 ],
@@ -2364,6 +2388,77 @@ class BotHandler
             $this->sendRequest("editMessageText", $data);
         } else {
             $this->sendRequest("sendMessage", $data);
+        }
+    }
+    private function handleShippingInfoSteps(): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        $state = $user['state'] ?? null;
+        $stateData = json_decode($user['state_data'] ?? '{}', true);
+        $messageId = $this->getMessageId($this->chatId);
+
+        switch ($state) {
+            case 'entering_shipping_name':
+                $name = trim($this->text);
+                $this->deleteMessage($this->messageId);
+                if (empty($name)) {
+                    $this->Alert("⚠️ نام و نام خانوادگی نمی‌تواند خالی باشد.");
+                    return;
+                }
+                $stateData['name'] = $name;
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'entering_shipping_phone',
+                    'state_data' => json_encode($stateData)
+                ]);
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ نام ثبت شد: {$name}\n\nحالا لطفاً شماره تلفن همراه خود را وارد کنید:",
+                    'reply_markup' => ['inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'show_cart']]]]
+                ]);
+                break;
+
+            case 'entering_shipping_phone':
+                $phone = trim($this->text);
+                $this->deleteMessage($this->messageId);
+                if (!is_numeric($phone) || strlen($phone) < 10) {
+                    $this->Alert("⚠️ لطفاً یک شماره تلفن معتبر وارد کنید.");
+                    return;
+                }
+                $stateData['phone'] = $phone;
+                DB::table('users')->update($this->chatId, [
+                    'state' => 'entering_shipping_address',
+                    'state_data' => json_encode($stateData)
+                ]);
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ شماره تلفن ثبت شد: {$phone}\n\nدر نهایت، لطفاً آدرس دقیق پستی خود را وارد کنید:",
+                    'reply_markup' => ['inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'show_cart']]]]
+                ]);
+                break;
+
+            case 'entering_shipping_address':
+                $address = trim($this->text);
+                $this->deleteMessage($this->messageId);
+                if (empty($address)) {
+                    $this->Alert("⚠️ آدرس نمی‌تواند خالی باشد.");
+                    return;
+                }
+
+                // ذخیره نهایی اطلاعات در دیتابیس کاربر
+                DB::table('users')->update($this->chatId, [
+                    'shipping_name' => $stateData['name'],
+                    'shipping_phone' => $stateData['phone'],
+                    'shipping_address' => $address,
+                    'state' => null, // پاک کردن وضعیت
+                    'state_data' => null
+                ]);
+
+                $this->deleteMessage($messageId); // حذف پیام راهنما
+                $this->Alert("✅ اطلاعات شما با موفقیت ذخیره شد.");
+                $this->showCart(); // نمایش مجدد سبد خرید با اطلاعات کامل
+                break;
         }
     }
 }
