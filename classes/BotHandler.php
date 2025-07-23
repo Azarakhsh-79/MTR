@@ -682,7 +682,7 @@ class BotHandler
 
         $results = [];
         foreach ($foundProducts as $product) {
-            $productUrl = $this->botLink . '?start=product_' . $product['id'];
+            $productUrl = $this->botLink . 'product_' . $product['id'];
 
             $results[] = [
                 'type' => 'article',
