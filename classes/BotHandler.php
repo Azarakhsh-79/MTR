@@ -190,7 +190,7 @@ class BotHandler
                 $this->deleteMessage($this->messageId);
                 $this->MainMenu();
                 return;
-            }elseif ($callbackData === 'nope') {
+            } elseif ($callbackData === 'nope') {
                 return;
             } elseif ($callbackData === 'admin_bot_settings') {
                 $this->showBotSettingsMenu($messageId);
@@ -716,7 +716,6 @@ class BotHandler
                 }
 
                 return;
-           
             } elseif ($callbackData === 'admin_reports') {
                 $this->Alert("این بخش هنوز آماده نیست.");
             } elseif ($callbackData === 'admin_add_category') {
@@ -800,10 +799,19 @@ class BotHandler
     public function MainMenu($messageId = null): void
     {
         $settings = DB::table('settings')->all();
-        $menuText = $settings['main_menu_text'] ?? 'به فروشگاه ما خوش آمدید!';
+        $hour = (int) jdf::jdate('H');
+        $defaultWelcome = match (true) {
+            $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟",
+            $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉",
+            default => "🌙 شب بخیر! شاید وقتشه یه هدیه‌ خاص برای خودت یا عزیزات پیدا کنی...",
+        };
+        $menuText = $settings['main_menu_text'] ?? $defaultWelcome;
 
         $allCategories = DB::table('categories')->all();
         $categoryButtons = [];
+        if (!empty($settings['daily_offer'])) {
+            $categoryButtons[] = [['text' => '🔥 پیشنهاد ویژه امروز', 'callback_data' => 'daily_offer']];
+        }
 
         if (!empty($allCategories)) {
             $activeCategories = [];
@@ -816,7 +824,8 @@ class BotHandler
 
             $row = [];
             foreach ($activeCategories as $category) {
-                $row[] = ['text' => $category['name'], 'callback_data' => 'category_' . $category['id']];
+                $icon = '🛍️';
+                $row[] = ['text' => "$icon " . $category['name'], 'callback_data' => 'category_' . $category['id']];
                 if (count($row) == 2) {
                     $categoryButtons[] = $row;
                     $row = [];
@@ -827,21 +836,20 @@ class BotHandler
             }
         }
 
-        $userActionButtons = [
+        $categoryButtons[] = [
             ['text' => '❤️ علاقه‌مندی‌ها', 'callback_data' => 'show_favorites'],
             ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
         ];
-        $categoryButtons[] = $userActionButtons;
+        $categoryButtons[] = [['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search']];
+
         $categoryButtons[] = [
-            ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search'],
-            ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us']
-
+            ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us'],
+            ['text' => '📞 پشتیبانی', 'callback_data' => 'contact_support']
         ];
-
 
         $user = DB::table('users')->findById($this->chatId);
         if ($user && !empty($user['is_admin'])) {
-            $categoryButtons[] = [['text' => '🔐 ورود به پنل مدیریت', 'callback_data' => 'admin_panel_entry']];
+            $categoryButtons[] = [['text' => '⚙️ مدیریت فروشگاه', 'callback_data' => 'admin_panel_entry']];
         }
 
         $keyboard = ['inline_keyboard' => $categoryButtons];
@@ -849,7 +857,7 @@ class BotHandler
         $data = [
             'chat_id' => $this->chatId,
             'text' => $menuText,
-            'reply_markup' =>  json_encode($keyboard),
+            'reply_markup' => json_encode($keyboard),
             'parse_mode' => 'HTML',
         ];
 
