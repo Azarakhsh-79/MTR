@@ -6,7 +6,7 @@ use Config\AppConfig;
 use Payment\ZarinpalPaymentHandler;
 use Bot\DB;     // <-- استفاده از مدیر دیتابیس جدید
 use Bot\Logger; // <-- اطمینان از وجود کلاس لاگر
-use Config\jdf;
+use Bot\jdf;
 
 
 class BotHandler
