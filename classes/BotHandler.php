@@ -172,7 +172,11 @@ class BotHandler
                 $this->MainMenu($messageId);
                 return;
             } elseif ($callbackData === 'show_favorites') {
-                $this->showFavoritesList($messageId);
+                $this->showFavoritesList(1, $messageId);
+                return;
+            } elseif (str_starts_with($callbackData, 'fav_list_page_')) {
+                $page = (int)str_replace('fav_list_page_', '', $callbackData);
+                $this->showFavoritesList($page, $messageId);
                 return;
             } elseif ($callbackData === 'show_cart') {
                 $this->showCart($messageId);
@@ -667,43 +671,88 @@ class BotHandler
         }
     }
 
-    public function showFavoritesList($messageId = null): void
+
+    public function showFavoritesList($page = 1, $messageId = null): void
     {
-        if ($messageId) {
-            $this->deleteMessage($messageId);
+        $user = DB::table('users')->findById($this->chatId);
+        if (!empty($user['message_ids'])) {
+            $this->deleteMessages($user['message_ids']);
         }
 
-        $user = DB::table('users')->findById($this->chatId);
-        $favorites = json_decode($user['favorites'] ?? '[]', true);
-
-        if (empty($favorites)) {
+        $favoritesIds = json_decode($user['favorites'] ?? '[]', true);
+        if (empty($favoritesIds)) {
             $this->Alert("❤️ لیست علاقه‌مندی‌های شما خالی است.");
             $this->MainMenu();
             return;
         }
 
-        $text = "❤️ لیست علاقه‌مندی‌های شما:\n\n";
-        $allProducts = DB::table('products')->all();
 
-        foreach ($favorites as $productId) {
-            if (isset($allProducts[$productId])) {
-                $product = $allProducts[$productId];
-                $text .= "- " . $product['name'] . " (" . number_format($product['price']) . " تومان)\n";
+        $allProducts = DB::table('products')->all();
+        $favoriteProducts = array_filter($allProducts, fn($product) => in_array($product['id'], $favoritesIds));
+
+        $perPage = 5;
+        $totalPages = ceil(count($favoriteProducts) / $perPage);
+        $offset = ($page - 1) * $perPage;
+        $productsOnPage = array_slice($favoriteProducts, $offset, $perPage);
+
+        $newMessageIds = [];
+
+        foreach ($productsOnPage as $product) {
+            $productText = $this->generateProductCardText($product);
+            $productKeyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '❌ حذف از علاقه‌مندی', 'callback_data' => 'toggle_favorite_' . $product['id']],
+                        ['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]
+                    ]
+                ]
+            ];
+            if (!empty($product['image_file_id'])) {
+                $res = $this->sendRequest("sendPhoto", [
+                    "chat_id" => $this->chatId,
+                    "photo" => $product['image_file_id'],
+                    "caption" => $productText,
+                    "parse_mode" => "Markdown",
+                    "reply_markup" => $productKeyboard
+                ]);
+            } else {
+                $res = $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => $productText,
+                    "parse_mode" => "Markdown",
+                    "reply_markup" => $productKeyboard
+                ]);
+            }
+            if (isset($res['result']['message_id'])) {
+                $newMessageIds[] = $res['result']['message_id'];
             }
         }
 
-        $keyboard = [
-            'inline_keyboard' => [
-                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
-            ]
-        ];
+        $navText = "--- علاقه‌مندی‌ها (صفحه {$page} از {$totalPages}) ---";
+        $navButtons = [];
+        if ($page > 1) {
+            $navButtons[] = ['text' => "▶️ صفحه قبل", 'callback_data' => "fav_list_page_" . ($page - 1)];
+        }
+        if ($page < $totalPages) {
+            $navButtons[] = ['text' => "صفحه بعد ◀️", 'callback_data' => "fav_list_page_" . ($page + 1)];
+        }
 
-        $this->sendRequest("sendMessage", [
+        $navKeyboard = [];
+        if (!empty($navButtons)) {
+            $navKeyboard[] = $navButtons;
+        }
+        $navKeyboard[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
+
+        $navMessageRes = $this->sendRequest("sendMessage", [
             'chat_id' => $this->chatId,
-            'text' => $text,
-            'parse_mode' => 'Markdown',
-            'reply_markup' => $keyboard
+            'text' => $navText,
+            'reply_markup' => ['inline_keyboard' => $navKeyboard]
         ]);
+        if (isset($navMessageRes['result']['message_id'])) {
+            $newMessageIds[] = $navMessageRes['result']['message_id'];
+        }
+
+        DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
     }
 
 
