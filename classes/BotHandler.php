@@ -165,15 +165,14 @@ class BotHandler
                 $this->MainMenu($messageId);
                 return;
             } else if (strpos($callbackData, 'list_products_cat_') === 0) {
-               
+
                 sscanf($callbackData, "list_products_cat_%d_page_%d", $categoryId, $page);
 
                 if ($categoryId && $page) {
                     $this->showProductListByCategory($categoryId, $page, $messageId);
                 }
-                return; 
-            }
-             elseif (strpos($callbackData, 'product_creation_back_to_') === 0) {
+                return;
+            } elseif (strpos($callbackData, 'product_creation_back_to_') === 0) {
                 $targetState = str_replace('product_creation_back_to_', '', $callbackData);
                 DB::table('users')->update($this->chatId, ['state' => 'adding_product_' . $targetState]);
 
@@ -782,28 +781,63 @@ class BotHandler
     }
     public function showProductListByCategory($categoryId, $page = 1, $messageId = null): void
     {
+        $user = DB::table('users')->findById($this->chatId);
+        if (!empty($user['message_ids'])) {
+            $this->deleteMessages($user['message_ids']);
+        }
+
         $perPage = 5;
+        $allProducts = DB::table('products')->find(['category_id' => $categoryId]);
 
-        $categoryProducts = DB::table('products')->find(['category_id' => $categoryId]);
-
-        if (empty($categoryProducts)) {
+        if (empty($allProducts)) {
             $this->Alert("هیچ محصولی در این دسته‌بندی یافت نشد.");
             $this->promptUserForCategorySelection($messageId);
             return;
         }
 
-        $totalProducts = count($categoryProducts);
-        $totalPages = ceil($totalProducts / $perPage);
-
+        $totalPages = ceil(count($allProducts) / $perPage);
         $offset = ($page - 1) * $perPage;
-        $productsOnPage = array_slice($categoryProducts, $offset, $perPage);
+        $productsOnPage = array_slice($allProducts, $offset, $perPage);
 
-        $text = "محصولات دسته‌بندی انتخاب شده (صفحه {$page} از {$totalPages}):\n\n";
+        $newMessageIds = [];
+
         foreach ($productsOnPage as $product) {
-            $text .= "📦 نام: " . $product['name'] . "\n";
-            $text .= "💰 قیمت: " . number_format($product['price']) . " تومان\n";
-            $text .= "---------------------\n";
+            $productText = "📦 نام: " . $product['name'] . "\n";
+            $productText .= "📝 توضیحات: " . ($product['description'] ?? '-') . "\n";
+            $productText .= "🔢 موجودی: " . ($product['count'] ?? 0) . " عدد\n";
+            $productText .= "💰 قیمت: " . number_format($product['price']) . " تومان";
+
+            $productKeyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id']],
+                        ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                    ]
+                ]
+            ];
+            if (!empty($product['image_file_id'])) {
+                $res = $this->sendRequest("sendPhoto", [
+                    "chat_id" => $this->chatId,
+                    "photo" => $product['image_file_id'],
+                    "caption" => $productText,
+                    "parse_mode" => "Markdown",
+                    "reply_markup" => $productKeyboard
+                ]);
+            } else {
+                $res = $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => $productText,
+                    "parse_mode" => "Markdown",
+                    "reply_markup" => $productKeyboard
+                ]);
+            }
+
+            if (isset($res['result']['message_id'])) {
+                $newMessageIds[] = $res['result']['message_id'];
+            }
         }
+
+        $navText = "--- صفحه {$page} از {$totalPages} ---";
         $navButtons = [];
         if ($page > 1) {
             $prevPage = $page - 1;
@@ -814,20 +848,22 @@ class BotHandler
             $navButtons[] = ['text' => "صفحه بعد ◀️", 'callback_data' => "list_products_cat_{$categoryId}_page_{$nextPage}"];
         }
 
-        $keyboard = [];
+        $navKeyboard = [];
         if (!empty($navButtons)) {
-            $keyboard[] = $navButtons;
+            $navKeyboard[] = $navButtons;
         }
-        $keyboard[] = [['text' => '⬅️ بازگشت به دسته‌بندی‌ها', 'callback_data' => 'admin_product_list']];
+        $navKeyboard[] = [['text' => '⬅️ بازگشت به دسته‌بندی‌ها', 'callback_data' => 'admin_product_list']];
 
-
-        $this->sendRequest("editMessageText", [
+        $navMessageRes = $this->sendRequest("sendMessage", [
             'chat_id' => $this->chatId,
-            'message_id' => $messageId,
-            'text' => $text,
-            'parse_mode' => 'Markdown',
-            'reply_markup' => ['inline_keyboard' => $keyboard]
+            'text' => $navText,
+            'reply_markup' => ['inline_keyboard' => $navKeyboard]
         ]);
+        if (isset($navMessageRes['result']['message_id'])) {
+            $newMessageIds[] = $navMessageRes['result']['message_id'];
+        }
+
+        DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
     }
     public function promptForProductCategory($messageId = null): void
     {
