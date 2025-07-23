@@ -79,7 +79,7 @@ class BotHandler
             }
 
 
-            if (in_array($state, ['adding_product_name', 'adding_product_description','adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
+            if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
                 return;
             }
@@ -164,8 +164,16 @@ class BotHandler
             if ($callbackData === 'main_menu') {
                 $this->MainMenu($messageId);
                 return;
+            } else if (strpos($callbackData, 'list_products_cat_') === 0) {
+               
+                sscanf($callbackData, "list_products_cat_%d_page_%d", $categoryId, $page);
+
+                if ($categoryId && $page) {
+                    $this->showProductListByCategory($categoryId, $page, $messageId);
+                }
+                return; 
             }
-            if (strpos($callbackData, 'product_creation_back_to_') === 0) {
+             elseif (strpos($callbackData, 'product_creation_back_to_') === 0) {
                 $targetState = str_replace('product_creation_back_to_', '', $callbackData);
                 DB::table('users')->update($this->chatId, ['state' => 'adding_product_' . $targetState]);
 
@@ -321,7 +329,7 @@ class BotHandler
             } elseif ($callbackData === 'admin_add_product') {
                 $this->promptForProductCategory($messageId);
             } elseif ($callbackData === 'admin_product_list') {
-                $this->showProductList($messageId);
+                $this->promptUserForCategorySelection($messageId);
             } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
                 $productId = str_replace('admin_edit_product_', '', $callbackData);
             } elseif ($callbackData === 'admin_bot_settings') {
@@ -772,7 +780,55 @@ class BotHandler
 
         DB::table('users')->update($this->chatId, ['message_ids' => $messageIdsToDelete]);
     }
+    public function showProductListByCategory($categoryId, $page = 1, $messageId = null): void
+    {
+        $perPage = 5;
 
+        $categoryProducts = DB::table('products')->find(['category_id' => $categoryId]);
+
+        if (empty($categoryProducts)) {
+            $this->Alert("هیچ محصولی در این دسته‌بندی یافت نشد.");
+            $this->promptUserForCategorySelection($messageId);
+            return;
+        }
+
+        $totalProducts = count($categoryProducts);
+        $totalPages = ceil($totalProducts / $perPage);
+
+        $offset = ($page - 1) * $perPage;
+        $productsOnPage = array_slice($categoryProducts, $offset, $perPage);
+
+        $text = "محصولات دسته‌بندی انتخاب شده (صفحه {$page} از {$totalPages}):\n\n";
+        foreach ($productsOnPage as $product) {
+            $text .= "📦 نام: " . $product['name'] . "\n";
+            $text .= "💰 قیمت: " . number_format($product['price']) . " تومان\n";
+            $text .= "---------------------\n";
+        }
+        $navButtons = [];
+        if ($page > 1) {
+            $prevPage = $page - 1;
+            $navButtons[] = ['text' => "▶️ صفحه قبل", 'callback_data' => "list_products_cat_{$categoryId}_page_{$prevPage}"];
+        }
+        if ($page < $totalPages) {
+            $nextPage = $page + 1;
+            $navButtons[] = ['text' => "صفحه بعد ◀️", 'callback_data' => "list_products_cat_{$categoryId}_page_{$nextPage}"];
+        }
+
+        $keyboard = [];
+        if (!empty($navButtons)) {
+            $keyboard[] = $navButtons;
+        }
+        $keyboard[] = [['text' => '⬅️ بازگشت به دسته‌بندی‌ها', 'callback_data' => 'admin_product_list']];
+
+
+        $this->sendRequest("editMessageText", [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => ['inline_keyboard' => $keyboard]
+        ]);
+    }
     public function promptForProductCategory($messageId = null): void
     {
         $allCategories = DB::table('categories')->all();
@@ -946,6 +1002,40 @@ class BotHandler
                 $this->showConfirmationPreview();
                 break;
         }
+    }
+    public function promptUserForCategorySelection($messageId = null): void
+    {
+        $allCategories = DB::table('categories')->all();
+        if (empty($allCategories)) {
+            $this->Alert("هیچ دسته‌بندی‌ای برای نمایش محصولات وجود ندارد!");
+            $this->showProductManagementMenu($messageId);
+            return;
+        }
+
+        $categoryButtons = [];
+        $row = [];
+        foreach ($allCategories as $category) {
+            $row[] = ['text' => $category['name'], 'callback_data' => 'list_products_cat_' . $category['id'] . '_page_1'];
+            if (count($row) >= 2) {
+                $categoryButtons[] = $row;
+                $row = [];
+            }
+        }
+        if (!empty($row)) {
+            $categoryButtons[] = $row;
+        }
+
+        $categoryButtons[] = [['text' => '⬅️ بازگشت', 'callback_data' => 'admin_manage_products']];
+
+        $keyboard = ['inline_keyboard' => $categoryButtons];
+        $text = "لطفاً برای مشاهده محصولات، یک دسته‌بندی را انتخاب کنید:";
+
+        $this->sendRequest("editMessageText", [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId,
+            'text' => $text,
+            'reply_markup' => $keyboard
+        ]);
     }
     private function showConfirmationPreview(): void
     {
