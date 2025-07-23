@@ -165,6 +165,10 @@ class BotHandler
 
         try {
             if ($callbackData === 'main_menu') {
+                $user = DB::table('users')->findById($this->chatId);
+                if (!empty($user['message_ids'])) {
+                    $this->deleteMessages($user['message_ids']);
+                }
                 $this->MainMenu($messageId);
                 return;
             } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
@@ -358,7 +362,6 @@ class BotHandler
                 $categoryId = (int)str_replace('category_', '', $callbackData);
                 $this->showUserProductList($categoryId, 1, $messageId);
                 return;
-
             } elseif (str_starts_with($callbackData, 'user_list_products_cat_')) {
                 sscanf($callbackData, "user_list_products_cat_%d_page_%d", $categoryId, $page);
                 if ($categoryId && $page) {
