@@ -1789,6 +1789,9 @@ class BotHandler
         } else {
             $keyboardRows[] = [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $productId]];
         }
+        if($messageId == null){
+            $keyboardRows[] = [['text' => 'منوی اصلی', 'callback_data' => 'main_menu']];
+        }
 
         $newKeyboard = ['inline_keyboard' => $keyboardRows];
 
