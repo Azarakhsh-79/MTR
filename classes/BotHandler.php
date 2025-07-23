@@ -75,33 +75,33 @@ class BotHandler
             if ($this->text === "/start") {
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
-                $this->MainMenu();
-                return;
-            }
 
-            if ($this->text === "/cart") {
+                $parts = explode(' ', $this->text);
+                if (isset($parts[1]) && str_starts_with($parts[1], 'product_')) {
+                    $productId = (int)str_replace('product_', '', $parts[1]);
+                    $this->showSingleProduct($productId);
+                } else {
+                    $this->MainMenu();
+                }
+                return;
+            } elseif ($this->text === "/cart") {
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 $this->showCart();
                 return;
-            }
-
-            if ($this->text === "/favorites") {
+            } elseif ($this->text === "/search") {
+                $this->activateInlineSearch();
+                return;
+            } elseif ($this->text === "/favorites") {
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 $this->showFavoritesList();
                 return;
-            }
-
-            if (strpos($state, 'editing_product_') === 0) {
+            } elseif (strpos($state, 'editing_product_') === 0) {
                 $this->handleProductUpdate($state);
                 return;
-            }
-
-            if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
+            } elseif (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
                 return;
-            }
-
-            if (str_starts_with($state, 'editing_category_name_')) {
+            } elseif (str_starts_with($state, 'editing_category_name_')) {
                 $categoryName = trim($this->text);
                 $this->deleteMessage($this->messageId);
                 if (empty($categoryName)) {
@@ -186,6 +186,9 @@ class BotHandler
                 $this->MainMenu($messageId);
                 return;
             } elseif ($callbackData === 'nope') {
+                return;
+            } elseif ($callbackData === 'activate_inline_search') {
+                $this->activateInlineSearch();
                 return;
             } elseif ($callbackData === 'show_favorites') {
                 $this->showFavoritesList(1, $messageId);
@@ -657,6 +660,68 @@ class BotHandler
 
         $this->sendRequest('answerCallbackQuery', ['callback_query_id' => $this->callbackQueryId]);
     }
+    public function handleInlineQuery(array $inlineQuery): void
+    {
+        $inlineQueryId = $inlineQuery['id'];
+        $query = trim($inlineQuery['query']);
+        if (empty($query)) {
+            $this->sendRequest("answerInlineQuery", ['inline_query_id' => $inlineQueryId, 'results' => []]);
+            return;
+        }
+
+        $allProducts = DB::table('products')->all();
+        $foundProducts = [];
+        foreach ($allProducts as $product) {
+            if (str_contains(strtolower($product['name']), strtolower($query)) || str_contains(strtolower($product['description']), strtolower($query))) {
+                $foundProducts[] = $product;
+            }
+        }
+
+        $foundProducts = array_slice($foundProducts, 0, 20);
+
+        $results = [];
+        foreach ($foundProducts as $product) {
+
+            if (!empty($product['image_file_id'])) {
+                $results[] = [
+                    'type' => 'photo',
+                    'id' => (string)$product['id'],
+                    'photo_file_id' => $product['image_file_id'],
+                    'title' => $product['name'],
+                    'description' => 'قیمت: ' . number_format($product['price']) . ' تومان',
+                    'caption' => $this->generateProductCardText($product),
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [
+                            [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]]
+                        ]
+                    ]
+                ];
+            } else {
+                $results[] = [
+                    'type' => 'article',
+                    'id' => (string)$product['id'],
+                    'title' => $product['name'],
+                    'input_message_content' => [
+                        'message_text' => $this->generateProductCardText($product),
+                        'parse_mode' => 'Markdown'
+                    ],
+                    'reply_markup' => [
+                        'inline_keyboard' => [
+                            [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]]
+                        ]
+                    ],
+                    'description' => 'قیمت: ' . number_format($product['price']) . ' تومان'
+                ];
+            }
+        }
+
+        $this->sendRequest("answerInlineQuery", [
+            'inline_query_id' => $inlineQueryId,
+            'results' => $results,
+            'cache_time' => 10
+        ]);
+    }
 
     public function MainMenu($messageId = null): void
     {
@@ -693,6 +758,7 @@ class BotHandler
             ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
         ];
         $categoryButtons[] = $userActionButtons;
+        $categoryButtons[] = [['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search']];
 
 
         $user = DB::table('users')->findById($this->chatId);
@@ -1719,7 +1785,7 @@ class BotHandler
         DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
     }
 
-    private function refreshProductCard(int $productId, int $messageId): void
+    private function refreshProductCard(int $productId, ?int $messageId): void
     {
         $user = DB::table('users')->findById($this->chatId);
         $cart = json_decode($user['cart'] ?? '{}', true);
@@ -1743,10 +1809,54 @@ class BotHandler
 
         $newKeyboard = ['inline_keyboard' => $keyboardRows];
 
-        $this->sendRequest('editMessageReplyMarkup', [
-            'chat_id' => $this->chatId,
-            'message_id' => $messageId,
-            'reply_markup' => $newKeyboard
+        if ($messageId) {
+
+            $this->sendRequest('editMessageReplyMarkup', [
+                'chat_id' => $this->chatId,
+                'message_id' => $messageId,
+                'reply_markup' => $newKeyboard
+            ]);
+        } else {
+            $product = DB::table('products')->findById($productId);
+            $productText = $this->generateProductCardText($product);
+            if (!empty($product['image_file_id'])) {
+                $this->sendRequest("sendPhoto", ["chat_id" => $this->chatId, "photo" => $product['image_file_id'], "caption" => $productText, "parse_mode" => "Markdown", "reply_markup" => $newKeyboard]);
+            } else {
+                $this->sendRequest("sendMessage", ["chat_id" => $this->chatId, "text" => $productText, "parse_mode" => "Markdown", "reply_markup" => $newKeyboard]);
+            }
+        }
+    }
+    public function activateInlineSearch(): void
+    {
+        $text = "🔍 برای جستجوی محصولات در این چت، روی دکمه زیر کلیک کرده و سپس عبارت مورد نظر خود را تایپ کنید:";
+        $buttonText = "شروع جستجو در این چت 🔍";
+
+        $this->sendRequest("sendMessage", [
+            "chat_id" => $this->chatId,
+            "text" => $text,
+            "reply_markup" => [
+                "inline_keyboard" => [
+                    [
+                        [
+                            "text" => $buttonText,
+                            "switch_inline_query_current_chat" => ""
+                        ]
+                    ]
+                ]
+            ]
         ]);
+    }
+
+    public function showSingleProduct(int $productId): void
+    {
+        $product = DB::table('products')->findById($productId);
+        if (!$product) {
+            $this->Alert("متاسفانه محصول مورد نظر یافت نشد یا حذف شده است.");
+            $this->MainMenu();
+            return;
+        }
+
+
+        $this->refreshProductCard($productId, null);
     }
 }
