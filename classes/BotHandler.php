@@ -401,7 +401,7 @@ class BotHandler
                     $cart[$productId]++;
                     DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
                     $this->refreshProductCard($productId, $messageId);
-                    $this->Alert("به سبد خرید اضافه شد", false);
+                    $this->Alert("✅ به سبد خرید اضافه شد", false);
                 }
                 return;
             } elseif (str_starts_with($callbackData, 'cart_decrease_')) {
@@ -476,7 +476,7 @@ class BotHandler
                 }
 
                 DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
-
+                $this->Alert("✅ به سبد خرید اضافه شد", false);
                 $this->refreshProductCard($productId, $messageId);
 
                 return;
@@ -1462,13 +1462,25 @@ class BotHandler
 
     private function generateProductCardText(array $product): string
     {
-        $text = "🛍️ <b>{$product['name']}</b>\n\n";
-        $text .= "ℹ️ " . ($product['description'] ?? 'توضیحاتی برای این محصول ثبت نشده است.') . "\n\n";
-        $text .= "📦 <b>موجودی:</b> " . ($product['count'] ?? 0) . " عدد\n";
-        $text .= "💵 <b>قیمت:</b> " . number_format($product['price']) . " تومان";
+        // کاراکترهای BiDi برای راست‌چین کردن متن
+        $rtl_on  = "\u{202B}";
+        $rtl_off = "\u{202C}";
+
+        $name        = htmlspecialchars($product['name']);
+        $desc        = htmlspecialchars($product['description'] ?? 'توضیحی ثبت نشده');
+        $count       = (int) ($product['count'] ?? 0);
+        $price       = number_format($product['price']);
+
+        $text = $rtl_on;
+        $text .= "🛍️ <b>{$name}</b>\n\n";
+        $text .= "ℹ️ {$desc}\n\n";
+        $text .= "📦 <b>موجودی:</b> {$count} عدد\n";
+        $text .= "💵 <b>قیمت:</b> {$price} تومان";
+        $text .= $rtl_off;
 
         return $text;
     }
+
 
     public function promptUserForCategorySelection($messageId = null): void
     {
