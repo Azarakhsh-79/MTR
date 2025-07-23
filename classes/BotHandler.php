@@ -1558,7 +1558,7 @@ class BotHandler
 
         $text = $rtl_on;
         $text .= "🛍️ <b>{$name}</b>\n\n";
-        $text .= "ℹ️ {$desc}\n\n";
+        $text .=  "{$desc}\n\n";
 
         if (isset($product['quantity'])) {
 
@@ -1980,7 +1980,7 @@ class BotHandler
 
     public function showAboutUs(): void
     {
-       
+
         $text = "🤖 *درباره توسعه‌دهنده ربات*\n\n";
         $text .= "این ربات یک *نمونه‌کار حرفه‌ای* در زمینه طراحی و توسعه ربات‌های فروشگاهی در تلگرام است که توسط *امیر سلیمانی* طراحی و برنامه‌نویسی شده است.\n\n";
         $text .= "✨ *ویژگی‌های برجسته ربات:*\n";
@@ -2092,19 +2092,19 @@ class BotHandler
 
         $quantity = $cart[$productId];
 
-
         $newKeyboard = [
-            [
-
-                ['text' => '➕', 'callback_data' => "edit_cart_increase_{$productId}"],
-                ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
-                ['text' => '➖', 'callback_data' => "edit_cart_decrease_{$productId}"]
-            ],
-            [
-                ['text' => '🗑 حذف کامل از سبد', 'callback_data' => "edit_cart_remove_{$productId}"]
+            'inline_keyboard' => [
+                [
+                    ['text' => '➕', 'callback_data' => "edit_cart_increase_{$productId}"],
+                    ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
+                    ['text' => '➖', 'callback_data' => "edit_cart_decrease_{$productId}"]
+                ],
+                [
+                    ['text' => '🗑 حذف کامل از سبد', 'callback_data' => "edit_cart_remove_{$productId}"]
+                ]
             ]
         ];
-
+       
         $this->sendRequest('editMessageReplyMarkup', [
             'chat_id' => $this->chatId,
             'message_id' => $messageId,
