@@ -171,6 +171,8 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
+            } elseif ($callbackData === 'nope') {
+                return;
             } elseif ($callbackData === 'show_favorites') {
                 $this->showFavoritesList(1, $messageId);
                 return;
@@ -424,7 +426,7 @@ class BotHandler
                 $user = DB::table('users')->findById($this->chatId);
                 $favorites = json_decode($user['favorites'] ?? '[]', true);
 
-                $message = ""; 
+                $message = "";
 
                 if (in_array($productId, $favorites)) {
                     $favorites = array_diff($favorites, [$productId]);
@@ -1634,7 +1636,7 @@ class BotHandler
                 $quantity = $cart[$productId];
                 $keyboardRows[] = [
                     ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
-                    ['text' => "{$quantity} عدد", 'callback_data' => 'show_cart'],
+                    ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
                     ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
                 ];
             } else {
@@ -1709,7 +1711,7 @@ class BotHandler
             $quantity = $cart[$productId];
             $keyboardRows[] = [
                 ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
-                ['text' => "{$quantity} عدد", 'callback_data' => 'show_cart'],
+                ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
                 ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
             ];
         } else {
