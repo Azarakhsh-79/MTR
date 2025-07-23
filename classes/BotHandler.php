@@ -79,7 +79,7 @@ class BotHandler
             }
 
 
-            if (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_price', 'adding_product_photo'])) {
+            if (in_array($state, ['adding_product_name', 'adding_product_description','adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
                 $this->handleProductCreationSteps();
                 return;
             }
