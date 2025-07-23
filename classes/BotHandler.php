@@ -1847,6 +1847,12 @@ class BotHandler
                                 "text" => $buttonText,
                                 "switch_inline_query_current_chat" => ""
                             ]
+                        ],
+                        [
+                            [
+                                "text" => "🔙 بازگشت",
+                                "callback_data" => "main_menu"
+                            ]
                         ]
                     ]
                 ]
