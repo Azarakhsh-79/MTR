@@ -155,7 +155,7 @@ class BotHandler
                     $this->MainMenu($messageId ?? null);
                 }
                 return;
-            } elseif (str_starts_with($state, 'editing_setting_')) {
+             } elseif (str_starts_with($state, 'editing_setting_')) {
                 $key = str_replace('editing_setting_', '', $state);
                 $value = trim($this->text);
                 $this->deleteMessage($this->messageId);
@@ -165,17 +165,15 @@ class BotHandler
                     $this->Alert("مقدار وارد شده باید یک عدد معتبر باشد.");
                     return;
                 }
-
-                DB::table('settings')->set($key, $value);
-
-                DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
-
+                
                 $userData = DB::table('users')->findById($this->chatId);
                 $stateData = json_decode($userData['state_data'] ?? '{}', true);
                 $messageId = $stateData['message_id'] ?? null;
 
+                DB::table('settings')->set($key, $value);
+                DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
+                
                 $this->showBotSettingsMenu($messageId);
-
                 return;
             }
         } catch (\Throwable $th) {
