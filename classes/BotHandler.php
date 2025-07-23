@@ -424,16 +424,20 @@ class BotHandler
                 $user = DB::table('users')->findById($this->chatId);
                 $favorites = json_decode($user['favorites'] ?? '[]', true);
 
+                $message = ""; 
+
                 if (in_array($productId, $favorites)) {
                     $favorites = array_diff($favorites, [$productId]);
-                    $message = "محصول \"{$product['name']}\" از علاقه‌مندی‌های شما حذف شد.";
+                    $message = "از علاقه‌مندی‌ها حذف شد.";
                 } else {
                     $favorites[] = $productId;
-                    $message = "محصول \"{$product['name']}\" به علاقه‌مندی‌های شما اضافه شد.";
+                    $message = "به علاقه‌مندی‌ها اضافه شد.";
                 }
-
                 DB::table('users')->update($this->chatId, ['favorites' => json_encode(array_values($favorites))]);
-                $this->Alert("❤️ " . $message);
+
+                $this->refreshProductCard($productId, $messageId);
+                $this->Alert("❤️ " . $message, false);
+
                 return;
             } elseif (str_starts_with($callbackData, 'add_to_cart_')) {
                 $productId = (int)str_replace('add_to_cart_', '', $callbackData);
