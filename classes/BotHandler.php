@@ -894,6 +894,10 @@ class BotHandler
 
         $user = DB::table('users')->findById($this->chatId);
         $cart = json_decode($user['cart'] ?? '{}', true);
+        if (!empty($user['message_ids'])) {
+            $this->deleteMessages($user['message_ids']);
+        }
+
 
         if (empty($cart)) {
             $this->Alert("🛒 سبد خرید شما خالی است.");
