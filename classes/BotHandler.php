@@ -386,6 +386,9 @@ class BotHandler
             } elseif ($callbackData === 'admin_panel_entry') {
                 $this->showAdminMainMenu($messageId);
                 return;
+            } elseif ($callbackData === 'show_about_us') {
+                $this->showAboutUs();
+                return;
             } elseif ($callbackData === 'admin_manage_categories') {
                 $this->showCategoryManagementMenu($messageId);
                 return;
@@ -743,7 +746,11 @@ class BotHandler
             ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
         ];
         $categoryButtons[] = $userActionButtons;
-        $categoryButtons[] = [['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search']];
+        $categoryButtons[] = [
+            ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search'],
+            ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us']
+
+        ];
 
 
         $user = DB::table('users')->findById($this->chatId);
@@ -1883,5 +1890,35 @@ class BotHandler
 
 
         $this->refreshProductCard($productId, null);
+    }
+
+    public function showAboutUs(): void
+    {
+        $text = "🤖 *درباره توسعه‌دهنده ربات*\n\n";
+        $text .= "این ربات یک *نمونه‌کار حرفه‌ای* در زمینه طراحی و توسعه ربات‌های فروشگاهی در تلگرام است که توسط *امیر سلیمانی* طراحی و برنامه‌نویسی شده است.\n\n";
+        $text .= "✨ *ویژگی‌های برجسته ربات:*\n";
+        $text .= "🔹 پنل مدیریت کامل از داخل تلگرام (افزودن، ویرایش، حذف محصول)\n";
+        $text .= "🗂️ مدیریت هوشمند دسته‌بندی محصولات\n";
+        $text .= "🛒 سیستم سبد خرید و لیست علاقه‌مندی‌ها\n";
+        $text .= "🔍 جستجوی پیشرفته با سرعت بالا (Inline Mode)\n";
+        $text .= "💳 اتصال امن به درگاه پرداخت\n\n";
+        $text .= "💼 *آیا برای کسب‌وکار خود به یک ربات تلگرامی نیاز دارید؟*\n";
+        $text .= "ما آماده‌ایم تا ایده‌های شما را به یک ربات کاربردی و حرفه‌ای تبدیل کنیم.\n\n";
+        $text .= "📞 *راه ارتباط با توسعه‌دهنده:* [@Amir_soleimani_79](https://t.me/Amir_soleimani_79)";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '⬅️ بازگشت به فروشگاه', 'callback_data' => 'main_menu']]
+            ]
+        ];
+
+        $this->sendRequest("editMessageText", [
+            'chat_id' => $this->chatId,
+            'message_id' => $this->messageId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'disable_web_page_preview' => false,
+            'reply_markup' => json_encode($keyboard)
+        ]);
     }
 }
