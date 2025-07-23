@@ -1980,7 +1980,7 @@ class BotHandler
 
     public function showAboutUs(): void
     {
-        id:
+       
         $text = "🤖 *درباره توسعه‌دهنده ربات*\n\n";
         $text .= "این ربات یک *نمونه‌کار حرفه‌ای* در زمینه طراحی و توسعه ربات‌های فروشگاهی در تلگرام است که توسط *امیر سلیمانی* طراحی و برنامه‌نویسی شده است.\n\n";
         $text .= "✨ *ویژگی‌های برجسته ربات:*\n";
@@ -2017,7 +2017,7 @@ class BotHandler
         $cart = json_decode($user['cart'] ?? '{}', true);
 
         if (empty($cart)) {
-            $this->Alert("سبد خرید شما خالی شده است.");
+            $this->Alert("سبد خرید شما خالی  است.");
             $this->MainMenu();
             return;
         }
@@ -2050,7 +2050,7 @@ class BotHandler
                         "chat_id" => $this->chatId,
                         "photo" => $product['image_file_id'],
                         "caption" => $itemText,
-                        "parse_mode" => "Markdown",
+                        "parse_mode" => "HTML",
                         "reply_markup" => $keyboard
                     ]);
                 } else {
