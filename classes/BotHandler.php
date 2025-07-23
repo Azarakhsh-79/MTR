@@ -188,26 +188,24 @@ class BotHandler
                     return;
                 }
 
-                $stateData = json_encode(['product_id' => $productId, 'category_id' => $categoryId, 'page' => $page, 'message_id' => $messageId]);
+                $stateData = json_encode([
+                    'product_id' => $productId,
+                    'category_id' => $categoryId,
+                    'page' => $page,
+                    'message_id' => $messageId
+                ]);
                 DB::table('users')->update($this->chatId, [
                     'state' => "editing_product_{$field}",
                     'state_data' => $stateData
                 ]);
 
-                $promptText = "لطفاً مقدار جدید برای {$fieldMap[$field]} را ارسال کنید:";
+                $promptText = "لطفاً مقدار جدید برای \"{$fieldMap[$field]}\" را ارسال کنید.";
                 if ($field === 'image_file_id') {
-                    $promptText .= "\n(برای حذف عکس فعلی دستور /remove_photo را ارسال کنید)";
+                    $promptText .= " (یا /remove_photo برای حذف عکس)";
                 }
 
-                $this->sendRequest("editMessageText", [
-                    'chat_id' => $this->chatId,
-                    'message_id' => $messageId,
-                    'text' => $promptText,
-                    'parse_mode' => 'Markdown',
-                    'reply_markup' => [
-                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => "admin_edit_product_{$productId}_cat_{$categoryId}_page_{$page}"]]]
-                    ]
-                ]);
+                $this->Alert($promptText, false);
+
                 return;
             } else if (strpos($callbackData, 'list_products_cat_') === 0) {
                 sscanf($callbackData, "list_products_cat_%d_page_%d", $categoryId, $page);
@@ -276,9 +274,10 @@ class BotHandler
                 $stateData = json_decode($user['state_data'] ?? '{}', true);
 
                 $this->createNewProduct($stateData);
-
-                DB::table('users')->unsetKey($this->chatId, 'state');
-                DB::table('users')->unsetKey($this->chatId, 'state_data');
+                DB::table('users')->update($this->chatId, [
+                    'state' => null,
+                    'state_data' => null
+                ]);
 
                 $this->Alert("✅ محصول با موفقیت ذخیره شد!");
                 $this->deleteMessage($messageId); // پیام پیش‌نمایش را حذف کن
@@ -286,9 +285,10 @@ class BotHandler
 
                 return;
             } elseif ($callbackData === 'product_confirm_cancel') {
-                DB::table('users')->unsetKey($this->chatId, 'state');
-                DB::table('users')->unsetKey($this->chatId, 'state_data');
-
+                DB::table('users')->update($this->chatId, [
+                    'state' => null,
+                    'state_data' => null
+                ]);
                 $this->Alert("❌ عملیات افزودن محصول لغو شد.");
                 $this->deleteMessage($messageId);
                 $this->showProductManagementMenu(null);
