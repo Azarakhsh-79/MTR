@@ -182,7 +182,45 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
-            } elseif ($callbackData === 'nope') {
+            } elseif ($callbackData === 'main_menu2') {
+                $user = DB::table('users')->findById($this->chatId);
+                if (!empty($user['message_ids'])) {
+                    $this->deleteMessages($user['message_ids']);
+                }
+                $this->deleteMessage($this->messageId);
+                $this->MainMenu($messageId);
+                return;
+            }elseif ($callbackData === 'nope') {
+                return;
+            } elseif ($callbackData === 'admin_bot_settings') {
+                $this->showBotSettingsMenu($messageId);
+                return;
+            } elseif (str_starts_with($callbackData, 'edit_setting_')) {
+                $key = str_replace('edit_setting_', '', $callbackData);
+
+                $fieldMap = [
+                    'store_name' => 'نام فروشگاه',
+                    'main_menu_text' => 'متن منوی اصلی',
+                    'delivery_price' => 'هزینه ارسال (به تومان)',
+                    'tax_percent' => 'درصد مالیات (فقط عدد)',
+                    'discount_fixed' => 'مبلغ تخفیف ثابت (به تومان)'
+                ];
+
+                if (!isset($fieldMap[$key])) {
+                    $this->Alert("خطا: تنظیمات نامشخص است.");
+                    return;
+                }
+
+                // ذخیره وضعیت کاربر و messageId برای بازگشت
+                $stateData = json_encode(['message_id' => $messageId]);
+                DB::table('users')->update($this->chatId, [
+                    'state' => "editing_setting_{$key}",
+                    'state_data' => $stateData
+                ]);
+
+                $promptText = "لطفاً مقدار جدید برای \"{$fieldMap[$key]}\" را ارسال کنید.";
+                $this->Alert($promptText, true);
+
                 return;
             } elseif ($callbackData === 'activate_inline_search') {
                 $this->activateInlineSearch($messageId);
@@ -678,8 +716,7 @@ class BotHandler
                 }
 
                 return;
-            } elseif ($callbackData === 'admin_bot_settings') {
-                $this->Alert("این بخش هنوز آماده نیست.");
+           
             } elseif ($callbackData === 'admin_reports') {
                 $this->Alert("این بخش هنوز آماده نیست.");
             } elseif ($callbackData === 'admin_add_category') {
@@ -1898,7 +1935,7 @@ class BotHandler
             $keyboardRows[] = [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $productId]];
         }
         if ($messageId == null) {
-            $keyboardRows[] = [['text' => 'منوی اصلی', 'callback_data' => 'main_menu']];
+            $keyboardRows[] = [['text' => 'منوی اصلی', 'callback_data' => 'main_menu2']];
         }
 
         $newKeyboard = ['inline_keyboard' => $keyboardRows];
@@ -2098,9 +2135,9 @@ class BotHandler
         }
 
         $quantity = $cart[$productId];
-        $product['quantity'] = $quantity; 
+        $product['quantity'] = $quantity;
 
-        $newText = $this->generateProductCardText($product); 
+        $newText = $this->generateProductCardText($product);
         $newKeyboard = [
             'inline_keyboard' => [
                 [
@@ -2116,7 +2153,7 @@ class BotHandler
 
 
         if (!empty($product['image_file_id'])) {
-            
+
             $this->sendRequest('editMessageCaption', [
                 'chat_id' => $this->chatId,
                 'message_id' => $messageId,
@@ -2132,6 +2169,64 @@ class BotHandler
                 'parse_mode' => 'HTML',
                 'reply_markup' => $newKeyboard
             ]);
+        }
+    }
+
+    public function showBotSettingsMenu($messageId = null): void
+    {
+        $settings = DB::table('settings')->all();
+
+        // مقادیر پیش‌فرض برای جلوگیری از خطا
+        $storeName = $settings['store_name'] ?? 'تعیین نشده';
+        $mainMenuText = $settings['main_menu_text'] ?? 'تعیین نشده';
+        $deliveryPrice = number_format($settings['delivery_price'] ?? 0) . ' تومان';
+        $taxPercent = ($settings['tax_percent'] ?? 0) . ' درصد';
+        $discountFixed = number_format($settings['discount_fixed'] ?? 0) . ' تومان';
+
+        $text = "⚙️ <b>تنظیمات ربات</b>\n\n";
+        $text .= "در این بخش می‌توانید مقادیر اصلی فروشگاه خود را مدیریت کنید.\n\n";
+        $text .= "<b>مقادیر فعلی:</b>\n";
+        $text .= "- نام فروشگاه: <b>{$storeName}</b>\n";
+        $text .= "- متن منوی اصلی: <b>{$mainMenuText}</b>\n";
+        $text .= "- هزینه ارسال: <b>{$deliveryPrice}</b>\n";
+        $text .= "- مالیات: <b>{$taxPercent}</b>\n";
+        $text .= "- تخفیف ثابت: <b>{$discountFixed}</b>\n";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '✏️ نام فروشگاه', 'callback_data' => 'edit_setting_store_name'],
+                    ['text' => '✏️ متن منو', 'callback_data' => 'edit_setting_main_menu_text']
+                ],
+                [
+                    ['text' => '✏️ هزینه ارسال', 'callback_data' => 'edit_setting_delivery_price'],
+                    ['text' => '✏️ درصد مالیات', 'callback_data' => 'edit_setting_tax_percent']
+                ],
+                [
+                    ['text' => '✏️ تخفیف ثابت', 'callback_data' => 'edit_setting_discount_fixed']
+                ],
+                [
+                    ['text' => '🔙 بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']
+                ]
+            ]
+        ];
+
+        $data = [
+            'chat_id' => $this->chatId,
+            'text' => $text,
+            'parse_mode' => 'HTML',
+            'reply_markup' => json_encode($keyboard)
+        ];
+
+        if ($messageId) {
+            $data['message_id'] = $messageId;
+            $res = $this->sendRequest("editMessageText", $data);
+        } else {
+            $res = $this->sendRequest("sendMessage", $data);
+        }
+
+        if (isset($res['result']['message_id'])) {
+            $this->saveMessageId($this->chatId, $res['result']['message_id']);
         }
     }
 }
