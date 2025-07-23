@@ -1572,17 +1572,13 @@ class BotHandler
         $user = DB::table('users')->findById($this->chatId);
         if (!empty($user['message_ids'])) {
             $this->deleteMessages($user['message_ids']);
-        } else if ($messageId) {
-            $this->deleteMessage($messageId);
-        }
-
+        } 
 
         $perPage = 5;
         $allProducts = DB::table('products')->find(['category_id' => $categoryId, 'is_active' => true]);
 
         if (empty($allProducts)) {
             $this->Alert("متاسفانه محصولی در این دسته‌بندی یافت نشد.");
-            $this->MainMenu();
             return;
         }
 
