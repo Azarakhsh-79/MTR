@@ -377,6 +377,31 @@ class BotHandler
             } elseif ($callbackData === 'admin_category_list') {
                 $this->showCategoryList($messageId);
                 return;
+            } elseif (str_starts_with($callbackData, 'cart_increase_')) {
+                $productId = (int)str_replace('cart_increase_', '', $callbackData);
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+
+                if (isset($cart[$productId])) {
+                    $cart[$productId]++;
+                    DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+                    $this->refreshProductCard($productId, $messageId);
+                }
+                return;
+            } elseif (str_starts_with($callbackData, 'cart_decrease_')) {
+                $productId = (int)str_replace('cart_decrease_', '', $callbackData);
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+
+                if (isset($cart[$productId])) {
+                    $cart[$productId]--;
+                    if ($cart[$productId] <= 0) {
+                        unset($cart[$productId]);
+                    }
+                    DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+                    $this->refreshProductCard($productId, $messageId);
+                }
+                return;
             } elseif (str_starts_with($callbackData, 'category_')) {
                 $categoryId = (int)str_replace('category_', '', $callbackData);
                 $this->showUserProductList($categoryId, 1, $messageId);
@@ -430,7 +455,8 @@ class BotHandler
 
                 DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
 
-                $this->Alert("✅ محصول \"{$product['name']}\" به سبد خرید شما اضافه شد.");
+                $this->refreshProductCard($productId, $messageId);
+
                 return;
             } elseif (strpos($callbackData, 'admin_edit_category_') === 0) {
                 $categoryId = str_replace('admin_edit_category_', '', $callbackData);
@@ -1570,9 +1596,12 @@ class BotHandler
     public function showUserProductList($categoryId, $page = 1, $messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
+        $cart = json_decode($user['cart'] ?? '{}', true);
+        $favorites = json_decode($user['favorites'] ?? '[]', true);
+
         if (!empty($user['message_ids'])) {
             $this->deleteMessages($user['message_ids']);
-        } 
+        }
 
         $perPage = 5;
         $allProducts = DB::table('products')->find(['category_id' => $categoryId, 'is_active' => true]);
@@ -1590,15 +1619,25 @@ class BotHandler
 
         foreach ($productsOnPage as $product) {
             $productText = $this->generateProductCardText($product);
+            $productId = $product['id'];
+            $keyboardRows = [];
 
-            $productKeyboard = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => '❤️', 'callback_data' => 'toggle_favorite_' . $product['id']],
-                        ['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]
-                    ]
-                ]
-            ];
+            $isFavorite = in_array($productId, $favorites);
+            $favoriteButtonText = $isFavorite ? '❤️ حذف از علاقه‌مندی' : '🤍 افزودن به علاقه‌مندی';
+            $keyboardRows[] = [['text' => $favoriteButtonText, 'callback_data' => 'toggle_favorite_' . $productId]];
+
+            if (isset($cart[$productId])) {
+                $quantity = $cart[$productId];
+                $keyboardRows[] = [
+                    ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
+                    ['text' => "{$quantity} عدد", 'callback_data' => 'show_cart'],
+                    ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
+                ];
+            } else {
+                $keyboardRows[] = [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $productId]];
+            }
+
+            $productKeyboard = ['inline_keyboard' => $keyboardRows];
 
             if (!empty($product['image_file_id'])) {
                 $res = $this->sendRequest("sendPhoto", [
@@ -1649,5 +1688,36 @@ class BotHandler
         }
 
         DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
+    }
+
+    private function refreshProductCard(int $productId, int $messageId): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        $cart = json_decode($user['cart'] ?? '{}', true);
+        $favorites = json_decode($user['favorites'] ?? '[]', true);
+
+        $keyboardRows = [];
+        $isFavorite = in_array($productId, $favorites);
+        $favoriteButtonText = $isFavorite ? '❤️ حذف از علاقه‌مندی' : '🤍 افزودن به علاقه‌مندی';
+        $keyboardRows[] = [['text' => $favoriteButtonText, 'callback_data' => 'toggle_favorite_' . $productId]];
+
+        if (isset($cart[$productId])) {
+            $quantity = $cart[$productId];
+            $keyboardRows[] = [
+                ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
+                ['text' => "{$quantity} عدد", 'callback_data' => 'show_cart'],
+                ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
+            ];
+        } else {
+            $keyboardRows[] = [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $productId]];
+        }
+
+        $newKeyboard = ['inline_keyboard' => $keyboardRows];
+
+        $this->sendRequest('editMessageReplyMarkup', [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId,
+            'reply_markup' => $newKeyboard
+        ]);
     }
 }
