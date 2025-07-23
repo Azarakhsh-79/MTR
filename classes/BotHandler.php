@@ -165,16 +165,15 @@ class BotHandler
                     $this->Alert("مقدار وارد شده باید یک عدد معتبر باشد.");
                     return;
                 }
-                
+
                 DB::table('settings')->set($key, $value);
 
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
-                $this->Alert("✅ تنظیمات با موفقیت به‌روز شد.");
-
+            
                 $userData = DB::table('users')->findById($this->chatId);
                 $stateData = json_decode($userData['state_data'] ?? '{}', true);
-                $messageId = $stateData['message_id'] ?? $this->getMessageId($this->chatId);
-                
+                $messageId = $stateData['message_id'] ?? null;
+
                 $this->showBotSettingsMenu($messageId);
 
                 return;
@@ -218,6 +217,9 @@ class BotHandler
             } elseif ($callbackData === 'admin_bot_settings') {
                 $this->showBotSettingsMenu($messageId);
                 return;
+            } elseif ($callbackData === 'show_store_rules') {
+                $this->showStoreRules($messageId);
+                return;
             } elseif (str_starts_with($callbackData, 'edit_setting_')) {
                 $key = str_replace('edit_setting_', '', $callbackData);
 
@@ -226,8 +228,17 @@ class BotHandler
                     'main_menu_text' => 'متن منوی اصلی',
                     'delivery_price' => 'هزینه ارسال (به تومان)',
                     'tax_percent' => 'درصد مالیات (فقط عدد)',
-                    'discount_fixed' => 'مبلغ تخفیف ثابت (به تومان)'
+                    'discount_fixed' => 'مبلغ تخفیف ثابت (به تومان)',
+                    'card_number' => 'شماره کارت (بدون فاصله)',
+                    'card_holder_name' => 'نام و نام خانوادگی صاحب حساب',
+                    'support_id' => 'آیدی پشتیبانی تلگرام (با @)',
+                    'store_rules' => 'قوانین فروشگاه (متن کامل)'
                 ];
+
+                if (!isset($fieldMap[$key])) {
+                    $this->Alert("خطا: تنظیمات نامشخص است.");
+                    return;
+                }
 
                 if (!isset($fieldMap[$key])) {
                     $this->Alert("خطا: تنظیمات نامشخص است.");
@@ -2207,12 +2218,16 @@ class BotHandler
     {
         $settings = DB::table('settings')->all();
 
-        // مقادیر پیش‌فرض برای جلوگیری از خطا
         $storeName = $settings['store_name'] ?? 'تعیین نشده';
         $mainMenuText = $settings['main_menu_text'] ?? 'تعیین نشده';
         $deliveryPrice = number_format($settings['delivery_price'] ?? 0) . ' تومان';
         $taxPercent = ($settings['tax_percent'] ?? 0) . ' درصد';
         $discountFixed = number_format($settings['discount_fixed'] ?? 0) . ' تومان';
+        $cardNumber = $settings['card_number'] ?? 'وارد نشده';
+        $cardHolderName = $settings['card_holder_name'] ?? 'وارد نشده';
+        $supportId = $settings['support_id'] ?? 'وارد نشده';
+        $storeRules = !empty($settings['store_rules']) ? '✅ تنظیم شده' : '❌ تنظیم نشده';
+
 
         $text = "⚙️ <b>تنظیمات ربات</b>\n\n";
         $text .= "در این بخش می‌توانید مقادیر اصلی فروشگاه خود را مدیریت کنید.\n\n";
@@ -2222,6 +2237,11 @@ class BotHandler
         $text .= "- هزینه ارسال: <b>{$deliveryPrice}</b>\n";
         $text .= "- مالیات: <b>{$taxPercent}</b>\n";
         $text .= "- تخفیف ثابت: <b>{$discountFixed}</b>\n";
+        $text .= "💳 شماره کارت: <b>{$cardNumber}</b>\n";
+        $text .= "👤 نام صاحب حساب: <b>{$cardHolderName}</b>\n";
+        $text .= "📞 آیدی پشتیبانی: <b>{$supportId}</b>\n";
+        $text .= "📜 قوانین فروشگاه: <b>{$storeRules}</b>\n";
+
 
         $keyboard = [
             'inline_keyboard' => [
@@ -2235,6 +2255,14 @@ class BotHandler
                 ],
                 [
                     ['text' => '✏️ تخفیف ثابت', 'callback_data' => 'edit_setting_discount_fixed']
+                ],
+                [
+                    ['text' => '✏️ شماره کارت', 'callback_data' => 'edit_setting_card_number'],
+                    ['text' => '✏️ نام صاحب حساب', 'callback_data' => 'edit_setting_card_holder_name']
+                ],
+                [
+                    ['text' => '✏️ آیدی پشتیبانی', 'callback_data' => 'edit_setting_support_id'],
+                    ['text' => '✏️ قوانین فروشگاه', 'callback_data' => 'edit_setting_store_rules']
                 ],
                 [
                     ['text' => '🔙 بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']
@@ -2258,6 +2286,31 @@ class BotHandler
 
         if (isset($res['result']['message_id'])) {
             $this->saveMessageId($this->chatId, $res['result']['message_id']);
+        }
+    }
+    public function showStoreRules($messageId = null): void
+    {
+        $settings = DB::table('settings')->all();
+        $rulesText = $settings['store_rules'] ?? 'متاسفانه هنوز قانونی برای فروشگاه تنظیم نشده است.';
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
+            ]
+        ];
+
+        $data = [
+            'chat_id' => $this->chatId,
+            'text' => "<b>📜 قوانین و مقررات فروشگاه</b>\n\n" . $rulesText,
+            'parse_mode' => 'HTML',
+            'reply_markup' => json_encode($keyboard)
+        ];
+
+        if ($messageId) {
+            $data['message_id'] = $messageId;
+            $this->sendRequest("editMessageText", $data);
+        } else {
+            $this->sendRequest("sendMessage", $data);
         }
     }
 }
