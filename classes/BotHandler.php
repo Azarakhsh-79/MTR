@@ -724,7 +724,7 @@ class BotHandler
         if (!empty($user['message_ids'])) {
             $this->deleteMessages($user['message_ids']);
         }
-
+        $cart = json_decode($user['cart'] ?? '{}', true);
         $favoritesIds = json_decode($user['favorites'] ?? '[]', true);
         if (empty($favoritesIds)) {
             $this->Alert("❤️ لیست علاقه‌مندی‌های شما خالی است.");
@@ -744,14 +744,23 @@ class BotHandler
 
         foreach ($productsOnPage as $product) {
             $productText = $this->generateProductCardText($product);
-            $productKeyboard = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => '❌ حذف از علاقه‌مندی', 'callback_data' => 'toggle_favorite_' . $product['id']],
-                        ['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]
-                    ]
-                ]
-            ];
+            $productId = $product['id'];
+            $keyboardRows = [];
+
+            $keyboardRows[] = [['text' => '❤️ حذف از علاقه‌مندی', 'callback_data' => 'toggle_favorite_' . $productId]];
+
+            if (isset($cart[$productId])) {
+                $quantity = $cart[$productId];
+                $keyboardRows[] = [
+                    ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
+                    ['text' => "{$quantity} عدد", 'callback_data' => 'show_cart'],
+                    ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
+                ];
+            } else {
+                $keyboardRows[] = [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $productId]];
+            }
+
+            $productKeyboard = ['inline_keyboard' => $keyboardRows];
             if (!empty($product['image_file_id'])) {
                 $res = $this->sendRequest("sendPhoto", [
                     "chat_id" => $this->chatId,
