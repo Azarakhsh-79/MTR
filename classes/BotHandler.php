@@ -6,6 +6,7 @@ use Config\AppConfig;
 use Payment\ZarinpalPaymentHandler;
 use Bot\DB;     // <-- استفاده از مدیر دیتابیس جدید
 use Bot\Logger; // <-- اطمینان از وجود کلاس لاگر
+use Config\jdf;
 
 
 class BotHandler
@@ -192,6 +193,9 @@ class BotHandler
             } elseif (str_starts_with($callbackData, 'fav_list_page_')) {
                 $page = (int)str_replace('fav_list_page_', '', $callbackData);
                 $this->showFavoritesList($page, $messageId);
+                return;
+            } elseif ($callbackData === 'edit_cart') {
+                $this->showCartInEditMode($messageId);
                 return;
             } elseif ($callbackData === 'show_cart') {
                 $this->showCart($messageId);
@@ -394,6 +398,20 @@ class BotHandler
                 return;
             } elseif ($callbackData === 'admin_category_list') {
                 $this->showCategoryList($messageId);
+                return;
+            } elseif (str_starts_with($callbackData, 'cart_remove_')) {
+                $productId = (int)str_replace('cart_remove_', '', $callbackData);
+
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+
+                if (isset($cart[$productId])) {
+                    unset($cart[$productId]);
+                    DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+                    $this->deleteMessage($messageId);
+                    $this->Alert("محصول از سبد خرید شما حذف شد.", false);
+                }
+
                 return;
             } elseif (str_starts_with($callbackData, 'cart_increase_')) {
                 $productId = (int)str_replace('cart_increase_', '', $callbackData);
@@ -883,27 +901,52 @@ class BotHandler
             return;
         }
 
-        $text = "🛒 **سبد خرید شما:**\n\n";
+        $settings = DB::table('settings')->all();
+
+        $storeName     = $settings['store_name'] ?? 'فروشگاه من';
+        $deliveryCost  = (int)($settings['delivery_price'] ?? 0);
+        $taxPercent    = (int)($settings['tax_percent'] ?? 0);
+        $discountFixed = (int)($settings['discount_fixed'] ?? 0);
+
+        $date = jdf::jdate('Y/m/d');
+        $invoiceId = $this->chatId;
+
+        $text = "🧾 <b>فاکتور خرید از {$storeName}</b>\n";
+        $text .= "📆 تاریخ: {$date}\n";
+        $text .= "🆔 شماره فاکتور: {$invoiceId}\n\n";
+
+        $text .= "<b>📋 لیست اقلام:</b>\n";
         $allProducts = DB::table('products')->all();
         $totalPrice = 0;
 
         foreach ($cart as $productId => $quantity) {
             if (isset($allProducts[$productId])) {
                 $product = $allProducts[$productId];
-                $itemPrice = $product['price'] * $quantity;
+                $unitPrice = $product['price'];
+                $itemPrice = $unitPrice * $quantity;
                 $totalPrice += $itemPrice;
-                $text .= "- " . $product['name'] . "\n";
-                $text .= "  (تعداد: {$quantity} عدد) - قیمت: " . number_format($itemPrice) . " تومان\n";
+
+                $text .= "🔸 {$product['name']}\n";
+                $text .= "  ➤ تعداد: {$quantity} | قیمت واحد: " . number_format($unitPrice) . " تومان\n";
+                $text .= "  💵 مجموع: " . number_format($itemPrice) . " تومان\n\n";
             }
         }
 
-        $text .= "\n--------------------\u{200F}\n";
-        $text .= "💰 **جمع کل:** " . number_format($totalPrice) . " تومان";
+        $taxAmount = round($totalPrice * $taxPercent / 100);
+        $grandTotal = $totalPrice + $taxAmount + $deliveryCost - $discountFixed;
+
+        $text .= "📦 هزینه ارسال: " . number_format($deliveryCost) . " تومان\n";
+        $text .= "💸 تخفیف: " . number_format($discountFixed) . " تومان\n";
+        $text .= "📊 مالیات ({$taxPercent}%): " . number_format($taxAmount) . " تومان\n";
+        $text .= "💰 <b>مبلغ نهایی قابل پرداخت:</b> <b>" . number_format($grandTotal) . "</b> تومان";
 
         $keyboard = [
             'inline_keyboard' => [
                 [['text' => '💳 پرداخت نهایی', 'callback_data' => 'checkout']],
-                [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart']],
+                [
+                    ['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'],
+                    ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart'],
+                ],
                 [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
             ]
         ];
@@ -912,9 +955,11 @@ class BotHandler
             'chat_id' => $this->chatId,
             'text' => $text,
             'parse_mode' => 'HTML',
-            'reply_markup' => $keyboard
+            'reply_markup' => json_encode($keyboard)
         ]);
     }
+
+
     public function showAdminMainMenu($messageId = null): void
     {
         $keyboard = [
@@ -1920,5 +1965,74 @@ class BotHandler
             'disable_web_page_preview' => false,
             'reply_markup' => json_encode($keyboard)
         ]);
+    }
+
+    public function showCartInEditMode($messageId): void
+    {
+        $this->deleteMessage($messageId);
+
+        $user = DB::table('users')->findById($this->chatId);
+        $cart = json_decode($user['cart'] ?? '{}', true);
+
+        if (empty($cart)) {
+            $this->Alert("سبد خرید شما خالی شده است.");
+            $this->MainMenu();
+            return;
+        }
+
+        $allProducts = DB::table('products')->all();
+        $newMessageIds = [];
+
+        foreach ($cart as $productId => $quantity) {
+            if (isset($allProducts[$productId])) {
+                $product = $allProducts[$productId];
+                $product['quantity'] = $quantity;
+                $itemText = $this->generateProductCardText($product);
+
+                $keyboard = [
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
+                            ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
+                            ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
+                        ],
+                        [
+                            ['text' => '🗑 حذف کامل از سبد', 'callback_data' => "cart_remove_{$productId}"]
+                        ]
+                    ]
+                ];
+
+                if (!empty($product['image_file_id'])) {
+                    $res = $this->sendRequest("sendPhoto", [
+                        "chat_id" => $this->chatId,
+                        "photo" => $product['image_file_id'],
+                        "caption" => $itemText,
+                        "parse_mode" => "Markdown",
+                        "reply_markup" => $keyboard
+                    ]);
+                } else {
+                    $res = $this->sendRequest("sendMessage", [
+                        "chat_id" => $this->chatId,
+                        "text" => $itemText,
+                        "parse_mode" => "Markdown",
+                        "reply_markup" => $keyboard
+                    ]);
+                }
+
+                if (isset($res['result']['message_id'])) {
+                    $newMessageIds[] = $res['result']['message_id'];
+                }
+            }
+        }
+
+        $endEditText = "تغییرات مورد نظر را اعمال کرده و در پایان، دکمه زیر را بزنید:";
+        $endEditKeyboard = [['text' => '✅ مشاهده فاکتور نهایی', 'callback_data' => 'show_cart']];
+
+        $navMessageRes = $this->sendRequest("sendMessage", ['chat_id' => $this->chatId, 'text' => $endEditText, 'reply_markup' => ['inline_keyboard' => [$endEditKeyboard]]]);
+        if (isset($navMessageRes['result']['message_id'])) {
+            $newMessageIds[] = $navMessageRes['result']['message_id'];
+        }
+
+        DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
     }
 }
