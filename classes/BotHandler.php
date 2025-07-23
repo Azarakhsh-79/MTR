@@ -97,7 +97,30 @@ class BotHandler
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 $this->showFavoritesList();
                 return;
-            } elseif (strpos($state, 'editing_product_') === 0) {
+            }  elseif (str_starts_with($state, 'awaiting_receipt_')) {
+                $this->deleteMessage($this->messageId);
+                if (!isset($this->message['photo'])) {
+                    $this->Alert("خطا: لطفاً فقط تصویر رسید را ارسال کنید.");
+                    return;
+                }
+
+                $invoiceId = str_replace('awaiting_receipt_', '', $state);
+                $receiptFileId = end($this->message['photo'])['file_id'];
+
+                DB::table('invoices')->update($invoiceId, [
+                    'receipt_file_id' => $receiptFileId,
+                    'status' => 'payment_review' 
+                ]);
+
+                DB::table('users')->update($this->chatId, ['state' => '']);
+
+                $this->Alert("✅ رسید شما با موفقیت دریافت شد. پس از بررسی، نتیجه به شما اطلاع داده خواهد شد. سپاس از خرید شما!");
+                $this->MainMenu(); 
+
+                $this->notifyAdminOfNewReceipt($invoiceId, $receiptFileId);
+
+                return;
+            }elseif (strpos($state, 'editing_product_') === 0) {
                 $this->handleProductUpdate($state);
                 return;
             } elseif (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
@@ -264,7 +287,78 @@ class BotHandler
             } elseif ($callbackData === 'activate_inline_search') {
                 $this->activateInlineSearch($messageId);
                 return;
-            } elseif ($callbackData === 'show_favorites') {
+            } elseif (str_starts_with($callbackData, 'admin_approve_')) {
+                $invoiceId = str_replace('admin_approve_', '', $callbackData);
+                
+                
+                $invoice = DB::table('invoices')->findById($invoiceId);
+                
+                if (!$invoice || $invoice['status'] === 'approved') {
+                    $this->Alert("این فاکتور قبلاً تایید شده یا یافت نشد.");
+                    return;
+                }
+
+                $productsTable = DB::table('products');
+                foreach ($invoice['products'] as $purchasedProduct) {
+                    $productId = $purchasedProduct['id'];
+                    $quantityPurchased = $purchasedProduct['quantity'];
+
+                    $productData = $productsTable->findById($productId);
+                    if ($productData) {
+                        $newCount = $productData['count'] - $quantityPurchased;
+                        $newCount = max(0, $newCount); 
+                        $productsTable->update($productId, ['count' => $newCount]);
+                    }
+                }
+                DB::table('invoices')->update($invoiceId, ['status' => 'approved']);
+                
+                $invoice = DB::table('invoices')->findById($invoiceId);
+                $userId = $invoice['user_id'] ?? null;
+                if ($userId) {
+                    $this->sendRequest("sendMessage", [
+                        'chat_id' => $userId,
+                        'text' => "✅ سفارش شما با شماره فاکتور `{$invoiceId}` تایید شد و به زودی برای شما ارسال خواهد شد. سپاس از خرید شما!",
+                        'parse_mode' => 'Markdown'
+                    ]);
+                }
+
+                $originalText = $callbackQuery['message']['text'];
+                $this->sendRequest("editMessageText", [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => $originalText . "\n\n--- ✅ این فاکتور توسط شما تایید شد. ---",
+                    'parse_mode' => 'Markdown'
+                ]);
+
+                return;
+
+            } elseif (str_starts_with($callbackData, 'admin_reject_')) {
+                $invoiceId = str_replace('admin_reject_', '', $callbackData);
+                DB::table('invoices')->update($invoiceId, ['status' => 'rejected']);
+                
+                $invoice = DB::table('invoices')->findById($invoiceId);
+                $userId = $invoice['user_id'] ?? null;
+                $settings = DB::table('settings')->all();
+                $supportId = $settings['support_id'] ?? 'پشتیبانی';
+
+                if ($userId) {
+                    $this->sendRequest("sendMessage", [
+                        'chat_id' => $userId,
+                        'text' => "❌ متاسفانه پرداخت شما برای فاکتور `{$invoiceId}` رد شد. لطفاً برای پیگیری با پشتیبانی ({$supportId}) تماس بگیرید.",
+                        'parse_mode' => 'Markdown'
+                    ]);
+                }
+                
+                $originalText = $callbackQuery['message']['text'];
+                $this->sendRequest("editMessageText", [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => $originalText . "\n\n--- ❌ این فاکتور توسط شما رد شد. ---",
+                    'parse_mode' => 'Markdown'
+                ]);
+
+                return;
+            }elseif ($callbackData === 'show_favorites') {
                 $this->showFavoritesList(1, $messageId);
                 return;
             } elseif (str_starts_with($callbackData, 'fav_list_page_')) {
@@ -293,10 +387,14 @@ class BotHandler
                 $this->saveMessageId($this->chatId, $res['result']['message_id'] ?? null);
                 return;
             } elseif ($callbackData === 'checkout') {
-                $this->Alert("این بخش هنوز آماده نیست. در حال انتقال به درگاه پرداخت...");
-                // $this->zarinpalPaymentHandler->startPayment(...);
+                $this->initiateCardPayment($messageId); // جایگزینی با تابع جدید
                 return;
-            } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
+            } elseif (str_starts_with($callbackData, 'upload_receipt_')) {
+                $invoiceId = str_replace('upload_receipt_', '', $callbackData);
+                DB::table('users')->update($this->chatId, ['state' => 'awaiting_receipt_' . $invoiceId]);
+                $this->Alert("لطفاً تصویر رسید خود را ارسال کنید...", true);
+                return;
+            }elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
                 sscanf($callbackData, "admin_edit_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
                 if ($productId && $categoryId && $page) {
                     $this->showProductEditMenu($productId, $messageId, $categoryId, $page);
@@ -2468,5 +2566,151 @@ class BotHandler
                 $this->showCart(); // نمایش مجدد سبد خرید با اطلاعات کامل
                 break;
         }
+    }
+    public function initiateCardPayment($messageId): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        $cart = json_decode($user['cart'] ?? '{}', true);
+
+        if (empty($cart)) {
+            $this->Alert("سبد خرید شما خالی است!");
+            return;
+        }
+
+        // ۱. خواندن تنظیمات و اطلاعات کاربر
+        $settings = DB::table('settings')->all();
+        $cardNumber = $settings['card_number'] ?? null;
+        $cardHolderName = $settings['card_holder_name'] ?? null;
+
+        if (empty($cardNumber) || empty($cardHolderName)) {
+            $this->Alert("متاسفانه اطلاعات کارت فروشگاه تنظیم نشده است. لطفاً به مدیریت اطلاع دهید.");
+            return;
+        }
+
+        // ۲. محاسبه مجدد مبلغ نهایی برای ثبت در فاکتور
+        $deliveryCost  = (int)($settings['delivery_price'] ?? 0);
+        $taxPercent    = (int)($settings['tax_percent'] ?? 0);
+        $allProducts = DB::table('products')->all();
+        $totalPrice = 0;
+        $productsDetails = [];
+
+        foreach ($cart as $productId => $quantity) {
+            if (isset($allProducts[$productId])) {
+                $product = $allProducts[$productId];
+                $itemPrice = $product['price'] * $quantity;
+                $totalPrice += $itemPrice;
+                $productsDetails[] = [
+                    'id' => $productId,
+                    'name' => $product['name'],
+                    'quantity' => $quantity,
+                    'price' => $product['price']
+                ];
+            }
+        }
+        $taxAmount = round($totalPrice * $taxPercent / 100);
+        $grandTotal = $totalPrice + $taxAmount + $deliveryCost;
+
+
+        // ۳. ایجاد فاکتور جدید در جدول invoices
+        $invoices = DB::table('invoices');
+        $newInvoiceId = uniqid('inv_');
+        $invoiceData = [
+            'id' => $newInvoiceId,
+            'user_id' => $this->chatId,
+            'user_info' => [
+                'name' => $user['shipping_name'],
+                'phone' => $user['shipping_phone'],
+                'address' => $user['shipping_address']
+            ],
+            'products' => $productsDetails,
+            'total_amount' => $grandTotal,
+            'status' => 'pending_payment', // وضعیت: در انتظار پرداخت
+            'created_at' => date('Y-m-d H:i:s'),
+            'receipt_file_id' => null
+        ];
+        $invoices->insert($invoiceData);
+
+        // ۴. پاک کردن سبد خرید کاربر
+        DB::table('users')->update($this->chatId, ['cart' => '[]']);
+
+        // ۵. نمایش اطلاعات کارت و دکمه ارسال رسید
+        $text = "✅ سفارش شما ثبت شد!\n\n";
+        $text .= "لطفاً مبلغ <b>" . number_format($grandTotal) . " تومان</b> را به کارت زیر واریز کرده و سپس با استفاده از دکمه زیر، تصویر رسید پرداخت را برای ما ارسال کنید.\n\n";
+        $text .= "💳 شماره کارت:\n<code>{$cardNumber}</code>\n\n";
+        $text .= "👤 نام صاحب حساب:\n<b>{$cardHolderName}</b>\n\n";
+        $text .= "❗️ سفارش شما پس از تایید پرداخت، پردازش و ارسال خواهد شد.";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '📸 ارسال رسید پرداخت', 'callback_data' => 'upload_receipt_' . $newInvoiceId]]
+            ]
+        ];
+
+        $this->sendRequest("editMessageText", [
+            'chat_id' => $this->chatId,
+            'message_id' => $messageId,
+            'text' => $text,
+            'parse_mode' => 'HTML',
+            'reply_markup' => json_encode($keyboard)
+        ]);
+    }
+    public function notifyAdminOfNewReceipt(string $invoiceId, string $receiptFileId): void
+    {
+        $settings = DB::table('settings')->all();
+        $adminId = $settings['admin_id'] ?? null;
+        if (empty($adminId)) {
+            Logger::log('error', 'notifyAdminOfNewReceipt failed', 'Admin ID is not set in settings.');
+            return;
+        }
+
+        $invoice = DB::table('invoices')->findById($invoiceId);
+        if (!$invoice) {
+            Logger::log('error', 'notifyAdminOfNewReceipt failed', 'Invoice not found.', ['invoice_id' => $invoiceId]);
+            return;
+        }
+
+        // نام متغیر از caption به text برای خوانایی بهتر تغییر کرد
+        $userInfo = $invoice['user_info'];
+        $products = $invoice['products'];
+        $totalAmount = number_format($invoice['total_amount']);
+        $createdAt = jdf::jdate('Y/m/d - H:i', strtotime($invoice['created_at']));
+
+        $text = "🔔 رسید پرداخت جدید دریافت شد 🔔\n\n";
+        $text .= "📄 شماره فاکتور: `{$invoiceId}`\n";
+        $text .= "📅 تاریخ ثبت: {$createdAt}\n\n";
+        $text .= "👤 مشخصات خریدار:\n";
+        $text .= "- نام: {$userInfo['name']}\n";
+        $text .= "- تلفن: `{$userInfo['phone']}`\n";
+        $text .= "- آدرس: {$userInfo['address']}\n\n";
+        $text .= "🛍 محصولات خریداری شده:\n";
+        foreach ($products as $product) {
+            $productPrice = number_format($product['price']);
+            $text .= "- {$product['name']} (تعداد: {$product['quantity']}, قیمت واحد: {$productPrice} تومان)\n";
+        }
+        $text .= "\n";
+        $text .= "💰 مبلغ کل پرداخت شده: {$totalAmount} تومان\n\n";
+       
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => '✅ تایید فاکتور', 'callback_data' => 'admin_approve_' . $invoiceId],
+                    ['text' => '❌ رد فاکتور', 'callback_data' => 'admin_reject_' . $invoiceId]
+                ]
+            ]
+        ];
+
+        $this->sendRequest("sendPhoto", [
+            'chat_id' => $adminId,
+            'photo' => $receiptFileId
+        ]);
+
+        $this->sendRequest("sendMessage", [
+            'chat_id' => $adminId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => json_encode($keyboard)
+        ]);
+        
     }
 }
