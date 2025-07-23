@@ -173,6 +173,54 @@ class BotHandler
                     $this->showProductEditMenu($productId, $messageId, $categoryId, $page);
                 }
                 return;
+            } elseif (str_starts_with($callbackData, 'confirm_product_edit_')) {
+                sscanf($callbackData, "confirm_product_edit_%d_cat_%d_page_%d", $productId, $categoryId, $page);
+
+                if (empty($productId) || empty($categoryId) || empty($page)) {
+                    $this->Alert("خطا: اطلاعات ویرایش محصول ناقص است.");
+                    return;
+                }
+
+                $product = DB::table('products')->findById($productId);
+                if (empty($product)) {
+                    $this->Alert("خطا: محصول یافت نشد.");
+                    return;
+                }
+
+                DB::table('users')->update($this->chatId, [
+                    'state' => null,
+                    'state_data' => null
+                ]);
+
+                $productText = $this->generateProductCardText($product);
+                $originalKeyboard = [
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page],
+                            ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                        ]
+                    ]
+                ];
+
+                if (!empty($product['image_file_id'])) {
+                    $this->sendRequest("editMessageCaption", [
+                        'chat_id' => $this->chatId,
+                        'message_id' => $messageId,
+                        'caption' => $productText,
+                        'parse_mode' => 'Markdown',
+                        'reply_markup' => $originalKeyboard
+                    ]);
+                } else {
+                    $this->sendRequest("editMessageText", [
+                        'chat_id' => $this->chatId,
+                        'message_id' => $messageId,
+                        'text' => $productText,
+                        'parse_mode' => 'Markdown',
+                        'reply_markup' => $originalKeyboard
+                    ]);
+                }
+                $this->Alert("✅ محصول با موفقیت ویرایش شد.", false);
+                return;
             } elseif (strpos($callbackData, 'edit_field_') === 0) {
                 sscanf($callbackData, "edit_field_%[^_]_%d_%d_%d", $field, $productId, $categoryId, $page);
                 $fieldMap = [
@@ -204,7 +252,7 @@ class BotHandler
                     $promptText .= " (یا /remove_photo برای حذف عکس)";
                 }
 
-                $this->Alert($promptText, false);
+                $this->Alert($promptText, true);
 
                 return;
             } else if (strpos($callbackData, 'list_products_cat_') === 0) {
@@ -1270,6 +1318,8 @@ class BotHandler
                     ['text' => '✏️ ویرایش قیمت', 'callback_data' => "edit_field_price_{$productId}_{$categoryId}_{$page}"]
                 ],
                 [['text' => '🖼️ ویرایش عکس', 'callback_data' => "edit_field_image_file_id_{$productId}_{$categoryId}_{$page}"]],
+                [['text' => '✅ تایید و ذخیره', 'callback_data' => "confirm_product_edit_{$productId}_cat_{$categoryId}_page_{$page}"]],
+
             ]
         ];
 
