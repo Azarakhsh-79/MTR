@@ -565,7 +565,7 @@ class BotHandler
             Logger::log('error', 'sendRequest failed', "Method: $method, HTTP: $httpCode", ['request' => $data, 'response' => $response]);
         }
         $response = json_decode($response, true);
-        //  Logger::log('info', 'sendRequest success', "Method: $method, HTTP: $httpCode", $response, true);
+        // Logger::log('info', 'sendRequest success', "Method: $method, HTTP: $httpCode", $response, true);
         return $response;
     }
     public function saveMessageId($chatId, $messageId)
@@ -826,12 +826,21 @@ class BotHandler
                     $this->Alert("⚠️ لطفاً یک عکس محصول ارسال کنید یا از دستور /skip برای رد کردن این مرحله استفاده کنید.");
                     return;
                 }
+                $this->sendRequest('editMessageText', [
+                    'chat_id' => $this->chatId,
+                    'message_id' => $messageId,
+                    'text' => "✅ محصول جدید با موفقیت ایجاد شد!",
+                    'parse_mode' => 'Markdown',
+                    'reply_markup' => [
+                        'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
+                    ]
+                ]);
+
                 $this->createNewProduct($stateData);
 
                 DB::table('users')->unsetKey($this->chatId, 'state');
                 DB::table('users')->unsetKey($this->chatId, 'state_data');
 
-                $this->Alert("✅ محصول جدید با موفقیت ایجاد شد!");
                 $this->showProductManagementMenu($messageId); 
                 break;
         }
