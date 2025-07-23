@@ -73,10 +73,24 @@ class BotHandler
 
         try {
             if ($this->text === "/start") {
-                DB::table('users')->update($this->chatId, ['state' => '']);
+                if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
+                DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
                 $this->MainMenu();
                 return;
             }
+
+            if ($this->text === "/cart") {
+                if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
+                $this->showCart();
+                return;
+            }
+
+            if ($this->text === "/favorites") {
+                if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
+                $this->showFavoritesList();
+                return;
+            }
+
             if (strpos($state, 'editing_product_') === 0) {
                 $this->handleProductUpdate($state);
                 return;
