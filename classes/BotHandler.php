@@ -202,6 +202,10 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
+            
+            } elseif ($callbackData === 'contact_support') {
+                $this->showSupportInfo($messageId);
+                return;
             } elseif ($callbackData === 'main_menu2') {
                 $user = DB::table('users')->findById($this->chatId);
                 if (!empty($user['message_ids'])) {
@@ -856,8 +860,7 @@ class BotHandler
 
             $row = [];
             foreach ($activeCategories as $category) {
-                $icon = '🛍️';
-                $row[] = ['text' => "$icon " . $category['name'], 'callback_data' => 'category_' . $category['id']];
+                $row[] = ['text' =>  $category['name'], 'callback_data' => 'category_' . $category['id']];
                 if (count($row) == 2) {
                     $categoryButtons[] = $row;
                     $row = [];
@@ -878,6 +881,8 @@ class BotHandler
             ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us'],
             ['text' => '📞 پشتیبانی', 'callback_data' => 'contact_support']
         ];
+
+        $categoryButtons[] = [['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules']];
 
         $user = DB::table('users')->findById($this->chatId);
         if ($user && !empty($user['is_admin'])) {
@@ -2227,19 +2232,23 @@ class BotHandler
         $cardHolderName = $settings['card_holder_name'] ?? 'وارد نشده ❌';
         $supportId = $settings['support_id'] ?? 'وارد نشده ❌';
 
-        $storeRules = !empty($settings['store_rules']) ? '✅ تنظیم شده' : '❌ تنظیم نشده';
+        $storeRules = !empty($settings['store_rules']) ? $settings['store_rules'] : '❌ تنظیم نشده';
+        $channelId = $settings['channel_id'] ?? 'وارد نشده';
+
 
         $text = "⚙️ <b>مدیریت تنظیمات ربات فروشگاه</b>\n\n";
-        $text .= "🛒 <b>نام فروشگاه:</b> {$storeName}\n";
-        $text .= "🧾 <b>متن منوی اصلی:</b> {$mainMenuText}\n";
-        $text .= "🚚 <b>هزینه ارسال:</b> {$deliveryPrice}\n";
-        $text .= "📊 <b>مالیات:</b> {$taxPercent}\n";
-        $text .= "🎁 <b>تخفیف ثابت:</b>{$discountFixed}\n\n";
+        $text .= "🛒 <b>نام فروشگاه: </b> {$storeName}\n";
+        $text .= "🧾 <b>متن منوی اصلی:</b>\n {$mainMenuText}\n\n";
 
-        $text .= "💳 <b>شماره کارت:</b> {$cardNumber}\n";
-        $text .= "👤 <b>صاحب حساب:</b> {$cardHolderName}\n";
-        $text .= "📞 <b>آیدی پشتیبانی:</b> {$supportId}\n";
-        $text .= "📜 <b>قوانین فروشگاه:</b> {$storeRules}\n";
+        $text .= "🚚 <b>هزینه ارسال: </b> {$deliveryPrice}\n";
+        $text .= "📊 <b>مالیات: </b> {$taxPercent}\n";
+        $text .= "🎁 <b>تخفیف ثابت: </b>{$discountFixed}\n\n";
+
+        $text .= "💳 <b>شماره کارت: </b> {$cardNumber}\n";
+        $text .= "👤 <b>صاحب حساب: </b> {$cardHolderName}\n";
+        $text .= "📢 آیدی کانال: <b>{$channelId}</b>\n";
+        $text .= "📞 <b>آیدی پشتیبانی: </b> {$supportId}\n";
+        $text .= "📜 <b>قوانین فروشگاه: \n</b> {$storeRules}\n";
 
         $keyboard = [
             'inline_keyboard' => [
@@ -2258,8 +2267,11 @@ class BotHandler
                     ['text' => '✏️ شماره کارت', 'callback_data' => 'edit_setting_card_number'],
                     ['text' => '✏️ نام صاحب حساب', 'callback_data' => 'edit_setting_card_holder_name']
                 ],
-                [
+                 [
                     ['text' => '✏️ آیدی پشتیبانی', 'callback_data' => 'edit_setting_support_id'],
+                    ['text' => '✏️ آیدی کانال', 'callback_data' => 'edit_setting_channel_id']
+                ],
+                [
                     ['text' => '✏️ قوانین فروشگاه', 'callback_data' => 'edit_setting_store_rules']
                 ],
                 [
@@ -2281,6 +2293,43 @@ class BotHandler
 
         if (isset($res['result']['message_id'])) {
             $this->saveMessageId($this->chatId, $res['result']['message_id']);
+        }
+    }
+    public function showSupportInfo($messageId = null): void
+    {
+        $settings = DB::table('settings')->all();
+        $supportId = $settings['support_id'] ?? null;
+
+        if (empty($supportId)) {
+            $this->Alert("اطلاعات پشتیبانی در حال حاضر تنظیم نشده است.");
+            return;
+        }
+
+        $username = str_replace('@', '', $supportId);
+        $supportUrl = "https://t.me/{$username}";
+
+        $text = "📞 برای ارتباط با واحد پشتیبانی می‌توانید مستقیماً از طریق آیدی زیر اقدام کنید .\n\n";
+        $text .= "👤 آیدی پشتیبانی: {$supportId}";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                // [['text' => '🚀 شروع گفتگو با پشتیبانی', 'url' => $supportUrl]],
+                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
+            ]
+        ];
+
+        $data = [
+            'chat_id' => $this->chatId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => json_encode($keyboard)
+        ];
+
+        if ($messageId) {
+            $data['message_id'] = $messageId;
+            $this->sendRequest("editMessageText", $data);
+        } else {
+            $this->sendRequest("sendMessage", $data);
         }
     }
 
