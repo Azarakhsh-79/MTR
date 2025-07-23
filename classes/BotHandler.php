@@ -223,10 +223,10 @@ class BotHandler
                 return;
             } elseif (strpos($callbackData, 'edit_field_') === 0) {
                 sscanf($callbackData, "edit_field_%[^_]_%d_%d_%d", $field, $productId, $categoryId, $page);
-                if($field === 'imagefileid'){
+                if ($field === 'imagefileid') {
                     $field = 'image_file_id';
                 }
-                
+
                 $fieldMap = [
                     'name' => 'نام',
                     'description' => 'توضیحات',
@@ -253,7 +253,7 @@ class BotHandler
 
                 $promptText = "لطفاً مقدار جدید برای \"{$fieldMap[$field]}\" را ارسال کنید.";
                 if ($field === 'image_file_id') {
-                    $promptText .= " (یا /remove_photo برای حذف عکس)";
+                    $promptText .= " (یا /remove برای حذف عکس)";
                 }
 
                 $this->Alert($promptText, true);
@@ -354,12 +354,39 @@ class BotHandler
             } elseif ($callbackData === 'admin_category_list') {
                 $this->showCategoryList($messageId);
                 return;
-            } elseif (strpos($callbackData, 'category_') === 0) {
-                $categoryId = str_replace('category_', '', $callbackData);
-                $this->sendRequest("answerCallbackQuery", [
-                    "callback_query_id" => $this->callbackQueryId,
-                    "text" => "دسته‌بندی با ID {$categoryId} انتخاب شد."
-                ]);
+            } elseif (str_starts_with($callbackData, 'category_')) {
+                $categoryId = (int)str_replace('category_', '', $callbackData);
+                $this->showUserProductList($categoryId, 1, $messageId);
+                return;
+
+            } elseif (str_starts_with($callbackData, 'user_list_products_cat_')) {
+                sscanf($callbackData, "user_list_products_cat_%d_page_%d", $categoryId, $page);
+                if ($categoryId && $page) {
+                    $this->showUserProductList($categoryId, $page, $messageId);
+                }
+                return;
+            } elseif (str_starts_with($callbackData, 'add_to_cart_')) {
+                $productId = (int)str_replace('add_to_cart_', '', $callbackData);
+                $product = DB::table('products')->findById($productId);
+
+                if (!$product || ($product['count'] ?? 0) <= 0) {
+                    $this->Alert("❌ متاسفانه موجودی این محصول به اتمام رسیده است.");
+                    return;
+                }
+
+                $user = DB::table('users')->findById($this->chatId);
+                $cart = json_decode($user['cart'] ?? '{}', true);
+
+                if (isset($cart[$productId])) {
+                    $cart[$productId]++;
+                } else {
+                    $cart[$productId] = 1;
+                }
+
+                DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
+
+                $this->Alert("✅ محصول \"{$product['name']}\" به سبد خرید شما اضافه شد.");
+                return;
             } elseif (strpos($callbackData, 'admin_edit_category_') === 0) {
                 $categoryId = str_replace('admin_edit_category_', '', $callbackData);
                 $category = DB::table('categories')->findById($categoryId);
@@ -424,7 +451,6 @@ class BotHandler
                 $this->promptForProductCategory($messageId);
             } elseif ($callbackData === 'admin_product_list') {
                 $this->promptUserForCategorySelection($messageId);
-
             } elseif (strpos($callbackData, 'admin_delete_product_') === 0) {
 
                 sscanf($callbackData, "admin_delete_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
@@ -1281,10 +1307,10 @@ class BotHandler
             case 'image_file_id':
                 if (isset($this->message['photo'])) {
                     $updateData['image_file_id'] = end($this->message['photo'])['file_id'];
-                } elseif ($this->text === '/remove_photo') {
+                } elseif ($this->text === '/remove') {
                     $updateData['image_file_id'] = null;
                 } else {
-                    $this->Alert("لطفاً یک عکس ارسال کنید یا از دستور /remove_photo استفاده کنید.");
+                    $this->Alert("لطفاً یک عکس ارسال کنید یا از دستور /remove استفاده کنید.");
                     return;
                 }
                 break;
@@ -1355,5 +1381,92 @@ class BotHandler
         ];
 
         DB::table('products')->insert($finalProduct);
+    }
+
+    public function showUserProductList($categoryId, $page = 1, $messageId = null): void
+    {
+        $user = DB::table('users')->findById($this->chatId);
+        if (!empty($user['message_ids'])) {
+            $this->deleteMessages($user['message_ids']);
+        } else if ($messageId) {
+            $this->deleteMessage($messageId);
+        }
+
+
+        $perPage = 5;
+        $allProducts = DB::table('products')->find(['category_id' => $categoryId, 'is_active' => true]);
+
+        if (empty($allProducts)) {
+            $this->Alert("متاسفانه محصولی در این دسته‌بندی یافت نشد.");
+            $this->MainMenu();
+            return;
+        }
+
+        $totalPages = ceil(count($allProducts) / $perPage);
+        $offset = ($page - 1) * $perPage;
+        $productsOnPage = array_slice($allProducts, $offset, $perPage);
+
+        $newMessageIds = [];
+
+        foreach ($productsOnPage as $product) {
+            $productText = $this->generateProductCardText($product);
+
+            $productKeyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]
+                    ]
+                ]
+            ];
+
+            if (!empty($product['image_file_id'])) {
+                $res = $this->sendRequest("sendPhoto", [
+                    "chat_id" => $this->chatId,
+                    "photo" => $product['image_file_id'],
+                    "caption" => $productText,
+                    "parse_mode" => "Markdown",
+                    "reply_markup" => $productKeyboard
+                ]);
+            } else {
+                $res = $this->sendRequest("sendMessage", [
+                    "chat_id" => $this->chatId,
+                    "text" => $productText,
+                    "parse_mode" => "Markdown",
+                    "reply_markup" => $productKeyboard
+                ]);
+            }
+
+            if (isset($res['result']['message_id'])) {
+                $newMessageIds[] = $res['result']['message_id'];
+            }
+        }
+
+        $navText = "--- صفحه {$page} از {$totalPages} ---";
+        $navButtons = [];
+        if ($page > 1) {
+            $prevPage = $page - 1;
+            $navButtons[] = ['text' => "▶️ صفحه قبل", 'callback_data' => "user_list_products_cat_{$categoryId}_page_{$prevPage}"];
+        }
+        if ($page < $totalPages) {
+            $nextPage = $page + 1;
+            $navButtons[] = ['text' => "صفحه بعد ◀️", 'callback_data' => "user_list_products_cat_{$categoryId}_page_{$nextPage}"];
+        }
+
+        $navKeyboard = [];
+        if (!empty($navButtons)) {
+            $navKeyboard[] = $navButtons;
+        }
+        $navKeyboard[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
+
+        $navMessageRes = $this->sendRequest("sendMessage", [
+            'chat_id' => $this->chatId,
+            'text' => $navText,
+            'reply_markup' => ['inline_keyboard' => $navKeyboard]
+        ]);
+        if (isset($navMessageRes['result']['message_id'])) {
+            $newMessageIds[] = $navMessageRes['result']['message_id'];
+        }
+
+        DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
     }
 }
