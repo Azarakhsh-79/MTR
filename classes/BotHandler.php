@@ -442,7 +442,7 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
                 $this->Alert("محصول از سبد خرید شما حذف شد.", false);
                 $this->deleteMessage($messageId);
-                
+
                 return;
             } elseif (str_starts_with($callbackData, 'cart_increase_')) {
                 $productId = (int)str_replace('cart_increase_', '', $callbackData);
@@ -2051,7 +2051,7 @@ class BotHandler
                     $res = $this->sendRequest("sendMessage", [
                         "chat_id" => $this->chatId,
                         "text" => $itemText,
-                        "parse_mode" => "Markdown",
+                        "parse_mode" => "HTML",
                         "reply_markup" => $keyboard
                     ]);
                 }
