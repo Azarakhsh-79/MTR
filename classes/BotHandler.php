@@ -681,39 +681,21 @@ class BotHandler
 
         $results = [];
         foreach ($foundProducts as $product) {
-
-            if (!empty($product['image_file_id'])) {
-                $results[] = [
-                    'type' => 'photo',
-                    'id' => (string)$product['id'],
-                    'photo_file_id' => $product['image_file_id'],
-                    'title' => $product['name'],
-                    'description' => 'قیمت: ' . number_format($product['price']) . ' تومان',
-                    'caption' => $this->generateProductCardText($product),
-                    'parse_mode' => 'Markdown',
-                    'reply_markup' => [
-                        'inline_keyboard' => [
-                            [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]]
-                        ]
+            $results[] = [
+                'type' => 'article',
+                'id' => (string)$product['id'],
+                'title' => $product['name'],
+                'input_message_content' => [
+                    'message_text' => $this->generateProductCardText($product),
+                    'parse_mode' => 'Markdown'
+                ],
+                'reply_markup' => [
+                    'inline_keyboard' => [
+                        [['text' => 'مشاهده و خرید', 'url' => $this->botLink . '?start=product_' . $product['id']]]
                     ]
-                ];
-            } else {
-                $results[] = [
-                    'type' => 'article',
-                    'id' => (string)$product['id'],
-                    'title' => $product['name'],
-                    'input_message_content' => [
-                        'message_text' => $this->generateProductCardText($product),
-                        'parse_mode' => 'Markdown'
-                    ],
-                    'reply_markup' => [
-                        'inline_keyboard' => [
-                            [['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]]
-                        ]
-                    ],
-                    'description' => 'قیمت: ' . number_format($product['price']) . ' تومان'
-                ];
-            }
+                ],
+                'description' => 'قیمت: ' . number_format($product['price']) . ' تومان'
+            ];
         }
 
         $this->sendRequest("answerInlineQuery", [
