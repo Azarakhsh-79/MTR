@@ -197,7 +197,7 @@ class BotHandler
                     'inline_keyboard' => [
                         [
                             ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page],
-                            ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                            ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page]
                         ]
                     ]
                 ];
@@ -420,10 +420,10 @@ class BotHandler
                 $this->promptForProductCategory($messageId);
             } elseif ($callbackData === 'admin_product_list') {
                 $this->promptUserForCategorySelection($messageId);
-            } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
-                $productId = str_replace('admin_edit_product_', '', $callbackData);
+
             } elseif (strpos($callbackData, 'admin_delete_product_') === 0) {
-                $productId = str_replace('admin_delete_product_', '', $callbackData);
+
+                sscanf($callbackData, "admin_delete_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
                 $product = DB::table('products')->findById($productId);
 
                 if (!$product) {
@@ -431,12 +431,12 @@ class BotHandler
                     return;
                 }
 
-                $confirmationText = "❓ آیا از حذف محصول \"{$product['name']}\" مطمئن هستید؟ این عمل غیرقابل بازگشت است.";
+                $confirmationText = "❓ آیا از حذف محصول \"{$product['name']}\" مطمئن هستید؟";
                 $confirmationKeyboard = [
                     'inline_keyboard' => [
                         [
                             ['text' => '✅ بله، حذف کن', 'callback_data' => 'confirm_delete_product_' . $productId],
-                            ['text' => '❌ خیر، انصراف', 'callback_data' => 'cancel_delete_product_' . $productId]
+                            ['text' => '❌ خیر، انصراف', 'callback_data' => 'cancel_delete_product_' . $productId . '_cat_' . $categoryId . '_page_' . $page]
                         ]
                     ]
                 ];
@@ -464,15 +464,13 @@ class BotHandler
                 $this->deleteMessage($messageId);
                 $this->Alert("✅ محصول با موفقیت حذف شد.");
                 return;
-
-                // ... داخل متد handleCallbackQuery
             } elseif (strpos($callbackData, 'cancel_delete_product_') === 0) {
-                $productId = str_replace('cancel_delete_product_', '', $callbackData);
+
+                sscanf($callbackData, "cancel_delete_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
                 $product = DB::table('products')->findById($productId);
 
-                if (!$product) {
-                    $this->Alert("خطا: محصول یافت نشد!");
-                    $this->deleteMessage($messageId); // پیام را پاک می‌کنیم چون محصولی وجود ندارد
+                if (!$product || !$categoryId || !$page) {
+                    $this->Alert("خطا در بازگردانی محصول.");
                     return;
                 }
 
@@ -481,8 +479,8 @@ class BotHandler
                 $originalKeyboard = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id']],
-                            ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                            ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page],
+                            ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page]
                         ]
                     ]
                 ];
@@ -503,6 +501,7 @@ class BotHandler
                         'reply_markup' => $originalKeyboard
                     ]);
                 }
+
                 return;
             } elseif ($callbackData === 'admin_bot_settings') {
                 $this->Alert("این بخش هنوز آماده نیست.");
@@ -912,7 +911,7 @@ class BotHandler
                 'inline_keyboard' => [
                     [
                         ['text' => '✏️ ویرایش', 'callback_data' => 'admin_edit_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page],
-                        ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id']]
+                        ['text' => '🗑 حذف', 'callback_data' => 'admin_delete_product_' . $product['id'] . '_cat_' . $categoryId . '_page_' . $page]
                     ]
                 ]
             ];
