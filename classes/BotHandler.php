@@ -155,6 +155,29 @@ class BotHandler
                     $this->MainMenu($messageId ?? null);
                 }
                 return;
+            } elseif (str_starts_with($state, 'editing_setting_')) {
+                $key = str_replace('editing_setting_', '', $state);
+                $value = trim($this->text);
+                $this->deleteMessage($this->messageId);
+
+                $numericFields = ['delivery_price', 'tax_percent', 'discount_fixed'];
+                if (in_array($key, $numericFields) && !is_numeric($value)) {
+                    $this->Alert("مقدار وارد شده باید یک عدد معتبر باشد.");
+                    return;
+                }
+                
+                DB::table('settings')->set($key, $value);
+
+                DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
+                $this->Alert("✅ تنظیمات با موفقیت به‌روز شد.");
+
+                $userData = DB::table('users')->findById($this->chatId);
+                $stateData = json_decode($userData['state_data'] ?? '{}', true);
+                $messageId = $stateData['message_id'] ?? $this->getMessageId($this->chatId);
+                
+                $this->showBotSettingsMenu($messageId);
+
+                return;
             }
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);

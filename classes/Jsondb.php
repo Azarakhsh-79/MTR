@@ -107,6 +107,12 @@ class JsonDB
 
         return true;
     }
+     public function set(string $key, $value): void
+    {
+        $allData = $this->getAllData();
+        $allData[$key] = $value;
+        $this->saveAllData($allData);
+    }
 
     public function all(): array
     {
