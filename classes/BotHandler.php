@@ -682,7 +682,6 @@ class BotHandler
         $favoritesIds = json_decode($user['favorites'] ?? '[]', true);
         if (empty($favoritesIds)) {
             $this->Alert("❤️ لیست علاقه‌مندی‌های شما خالی است.");
-            $this->MainMenu();
             return;
         }
 
