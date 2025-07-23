@@ -1041,10 +1041,14 @@ class BotHandler
     }
     public function promptUserForCategorySelection($messageId = null): void
     {
+        $user = DB::table('users')->findById($this->chatId);
+        if (!empty($user['message_ids'])) {
+            $this->deleteMessages($user['message_ids']);
+        }
         $allCategories = DB::table('categories')->all();
         if (empty($allCategories)) {
             $this->Alert("هیچ دسته‌بندی‌ای برای نمایش محصولات وجود ندارد!");
-            $this->showProductManagementMenu($messageId);
+            $this->showProductManagementMenu(messageId: $messageId);
             return;
         }
 
