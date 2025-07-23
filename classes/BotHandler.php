@@ -72,7 +72,8 @@ class BotHandler
         $state = $currentUser['state'] ?? '';
 
         try {
-            if ($this->text === "/start") {
+              if (str_starts_with($this->text, "/start")) {
+              
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
 
@@ -81,7 +82,7 @@ class BotHandler
                     $productId = (int)str_replace('product_', '', $parts[1]);
                     $this->showSingleProduct($productId);
                 } else {
-                    $this->MainMenu();
+                    $this->MainMenu(); 
                 }
                 return;
             } elseif ($this->text === "/cart") {
