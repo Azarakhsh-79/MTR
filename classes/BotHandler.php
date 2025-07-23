@@ -154,11 +154,6 @@ class BotHandler
                     $this->MainMenu($messageId ?? null);
                 }
                 return;
-            } else {
-                $this->sendRequest("sendMessage", [
-                    "chat_id" => $this->chatId,
-                    "text" => "دستور نامشخص است. لطفاً با /start شروع کنید."
-                ]);
             }
         } catch (\Throwable $th) {
             Logger::log('error', 'BotHandler::handleRequest', 'message: ' . $th->getMessage(), ['chat_id' => $this->chatId, 'text' => $this->text]);
@@ -250,7 +245,7 @@ class BotHandler
                         'chat_id' => $this->chatId,
                         'message_id' => $messageId,
                         'caption' => $productText,
-                        'parse_mode' => 'Markdown',
+                        'parse_mode' => 'HTML',
                         'reply_markup' => $originalKeyboard
                     ]);
                 } else {
@@ -258,7 +253,7 @@ class BotHandler
                         'chat_id' => $this->chatId,
                         'message_id' => $messageId,
                         'text' => $productText,
-                        'parse_mode' => 'Markdown',
+                        'parse_mode' => 'HTML',
                         'reply_markup' => $originalKeyboard
                     ]);
                 }
@@ -529,7 +524,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => "✅ دسته‌بندی انتخاب شد.\n\nحالا لطفاً نام محصول را وارد کنید:",
-                    'parse_mode' => 'Markdown',
+                    'parse_mode' => 'HTML',
                     'reply_markup' => [
                         'inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'admin_manage_products']]]
                     ]
@@ -614,7 +609,7 @@ class BotHandler
                         'chat_id' => $this->chatId,
                         'message_id' => $messageId,
                         'caption' => $productText,
-                        'parse_mode' => 'Markdown',
+                        'parse_mode' => 'HTML',
                         'reply_markup' => $originalKeyboard
                     ]);
                 } else {
@@ -622,7 +617,7 @@ class BotHandler
                         'chat_id' => $this->chatId,
                         'message_id' => $messageId,
                         'text' => $productText,
-                        'parse_mode' => 'Markdown',
+                        'parse_mode' => 'HTML',
                         'reply_markup' => $originalKeyboard
                     ]);
                 }
@@ -689,16 +684,17 @@ class BotHandler
                 'id' => (string)$product['id'],
                 'title' => $product['name'],
                 'input_message_content' => [
-                    'message_text' => "✅ محصول: **{$product['name']}**\n\n" .
-                        "[برای مشاهده و خرید این محصول اینجا کلیک کنید]({$productUrl})",
-                    'parse_mode' => 'Markdown'
+                    'message_text' => $this->generateProductCardText($product),
+                    'parse_mode' => 'HTML'
                 ],
+
                 'reply_markup' => [
                     'inline_keyboard' => [
-                        [['text' => 'مشاهده و خرید', 'url' => $productUrl]]
+                        [['text' => 'مشاهده در ربات', 'url' => $productUrl]]
                     ]
                 ],
                 'description' => 'قیمت: ' . number_format($product['price']) . ' تومان'
+
             ];
         }
 
@@ -818,14 +814,14 @@ class BotHandler
                     "chat_id" => $this->chatId,
                     "photo" => $product['image_file_id'],
                     "caption" => $productText,
-                    "parse_mode" => "Markdown",
+                    "parse_mode" => "HTML",
                     "reply_markup" => $productKeyboard
                 ]);
             } else {
                 $res = $this->sendRequest("sendMessage", [
                     "chat_id" => $this->chatId,
                     "text" => $productText,
-                    "parse_mode" => "Markdown",
+                    "parse_mode" => "HTML",
                     "reply_markup" => $productKeyboard
                 ]);
             }
@@ -905,7 +901,7 @@ class BotHandler
         $this->sendRequest("sendMessage", [
             'chat_id' => $this->chatId,
             'text' => $text,
-            'parse_mode' => 'Markdown',
+            'parse_mode' => 'HTML',
             'reply_markup' => $keyboard
         ]);
     }
@@ -974,7 +970,7 @@ class BotHandler
             $res = $this->sendRequest("sendMessage", [
                 "chat_id" => $this->chatId,
                 "text" => "دسته: {$categoryName}",
-                "parse_mode" => "Markdown",
+                "parse_mode" => "HTML",
                 "reply_markup" => $keyboard
             ]);
             if (isset($res['result']['message_id'])) {
@@ -1241,14 +1237,14 @@ class BotHandler
                     "chat_id" => $this->chatId,
                     "photo" => $product['image_file_id'],
                     "caption" => $productText,
-                    "parse_mode" => "Markdown",
+                    "parse_mode" => "HTML",
                     "reply_markup" => $productKeyboard
                 ]);
             } else {
                 $res = $this->sendRequest("sendMessage", [
                     "chat_id" => $this->chatId,
                     "text" => $productText,
-                    "parse_mode" => "Markdown",
+                    "parse_mode" => "HTML",
                     "reply_markup" => $productKeyboard
                 ]);
             }
@@ -1348,7 +1344,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => "✅ نام محصول ثبت شد: {$productName}\n\nحالا لطفاً توضیحات محصول را وارد کنید:",
-                    'parse_mode' => 'Markdown',
+                    'parse_mode' => 'HTML',
                     'reply_markup' => [
                         'inline_keyboard' => [
                             [
@@ -1371,7 +1367,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => "✅ توضیحات ثبت شد.\n\nحالا لطفاً تعداد موجودی محصول را وارد کنید (فقط عدد انگلیسی):",
-                    'parse_mode' => 'Markdown',
+                    'parse_mode' => 'HTML',
                     'reply_markup' => [
                         'inline_keyboard' => [
                             [
@@ -1399,7 +1395,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => "✅ تعداد ثبت شد: {$count} عدد\n\nحالا لطفاً قیمت محصول را وارد کنید (به تومان):",
-                    'parse_mode' => 'Markdown',
+                    'parse_mode' => 'HTML',
                     'reply_markup' => [
                         'inline_keyboard' => [
                             [
@@ -1427,7 +1423,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => "✅ قیمت ثبت شد: " . number_format($price) . " تومان\n\nحالا لطفاً عکس محصول را ارسال کنید (برای رد کردن از دستور /skip استفاده کنید):",
-                    'parse_mode' => 'Markdown',
+                    'parse_mode' => 'HTML',
                     'reply_markup' => [
                         'inline_keyboard' => [
                             [
@@ -1463,13 +1459,14 @@ class BotHandler
 
     private function generateProductCardText(array $product): string
     {
-        $text = "📦 نام: " . $product['name'] . "\n";
-        $text .= "📝 توضیحات: " . ($product['description'] ?? '-') . "\n";
-        $text .= "🔢 موجودی: " . ($product['count'] ?? 0) . " عدد\n";
-        $text .= "💰 قیمت: " . number_format($product['price']) . " تومان";
+        $text = "🛍️ <b>{$product['name']}</b>\n\n";
+        $text .= "ℹ️ " . ($product['description'] ?? 'توضیحاتی برای این محصول ثبت نشده است.') . "\n\n";
+        $text .= "📦 <b>موجودی:</b> " . ($product['count'] ?? 0) . " عدد\n";
+        $text .= "💵 <b>قیمت:</b> " . number_format($product['price']) . " تومان";
 
         return $text;
     }
+
     public function promptUserForCategorySelection($messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
@@ -1535,14 +1532,14 @@ class BotHandler
                 'chat_id' => $this->chatId,
                 'photo' => $stateData['image_file_id'],
                 'caption' => $previewText,
-                'parse_mode' => 'Markdown',
+                'parse_mode' => 'HTML',
                 'reply_markup' => $keyboard
             ]);
         } else {
             $res = $this->sendRequest('sendMessage', [
                 'chat_id' => $this->chatId,
                 'text' => $previewText,
-                'parse_mode' => 'Markdown',
+                'parse_mode' => 'HTML',
                 'reply_markup' => $keyboard
             ]);
         }
@@ -1650,7 +1647,7 @@ class BotHandler
             'chat_id' => $this->chatId,
             'message_id' => $messageId,
             $textOrCaptionKey => $text,
-            'parse_mode' => 'Markdown',
+            'parse_mode' => 'HTML',
             'reply_markup' => $keyboard
         ]);
     }
@@ -1725,14 +1722,14 @@ class BotHandler
                     "chat_id" => $this->chatId,
                     "photo" => $product['image_file_id'],
                     "caption" => $productText,
-                    "parse_mode" => "Markdown",
+                    "parse_mode" => "HTML",
                     "reply_markup" => $productKeyboard
                 ]);
             } else {
                 $res = $this->sendRequest("sendMessage", [
                     "chat_id" => $this->chatId,
                     "text" => $productText,
-                    "parse_mode" => "Markdown",
+                    "parse_mode" => "HTML",
                     "reply_markup" => $productKeyboard
                 ]);
             }
@@ -1806,9 +1803,9 @@ class BotHandler
             $product = DB::table('products')->findById($productId);
             $productText = $this->generateProductCardText($product);
             if (!empty($product['image_file_id'])) {
-                $this->sendRequest("sendPhoto", ["chat_id" => $this->chatId, "photo" => $product['image_file_id'], "caption" => $productText, "parse_mode" => "Markdown", "reply_markup" => $newKeyboard]);
+                $this->sendRequest("sendPhoto", ["chat_id" => $this->chatId, "photo" => $product['image_file_id'], "caption" => $productText, "parse_mode" => "HTML", "reply_markup" => $newKeyboard]);
             } else {
-                $this->sendRequest("sendMessage", ["chat_id" => $this->chatId, "text" => $productText, "parse_mode" => "Markdown", "reply_markup" => $newKeyboard]);
+                $this->sendRequest("sendMessage", ["chat_id" => $this->chatId, "text" => $productText, "parse_mode" => "HTML", "reply_markup" => $newKeyboard]);
             }
         }
     }
