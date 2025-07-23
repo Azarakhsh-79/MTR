@@ -72,8 +72,8 @@ class BotHandler
         $state = $currentUser['state'] ?? '';
 
         try {
-              if (str_starts_with($this->text, "/start")) {
-              
+            if (str_starts_with($this->text, "/start")) {
+
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
 
@@ -82,7 +82,7 @@ class BotHandler
                     $productId = (int)str_replace('product_', '', $parts[1]);
                     $this->showSingleProduct($productId);
                 } else {
-                    $this->MainMenu(); 
+                    $this->MainMenu();
                 }
                 return;
             } elseif ($this->text === "/cart") {
@@ -682,17 +682,20 @@ class BotHandler
 
         $results = [];
         foreach ($foundProducts as $product) {
+            $productUrl = $this->botLink . '?start=product_' . $product['id'];
+
             $results[] = [
                 'type' => 'article',
                 'id' => (string)$product['id'],
                 'title' => $product['name'],
                 'input_message_content' => [
-                    'message_text' => $this->generateProductCardText($product),
+                    'message_text' => "✅ محصول: **{$product['name']}**\n\n" .
+                        "[برای مشاهده و خرید این محصول اینجا کلیک کنید]({$productUrl})",
                     'parse_mode' => 'Markdown'
                 ],
                 'reply_markup' => [
                     'inline_keyboard' => [
-                        [['text' => 'مشاهده و خرید', 'url' => $this->botLink . '?start=product_' . $product['id']]]
+                        [['text' => 'مشاهده و خرید', 'url' => $productUrl]]
                     ]
                 ],
                 'description' => 'قیمت: ' . number_format($product['price']) . ' تومان'
