@@ -2083,6 +2083,13 @@ class BotHandler
     {
         $user = DB::table('users')->findById($this->chatId);
         $cart = json_decode($user['cart'] ?? '{}', true);
+        $product = DB::table('products')->findById($productId);
+
+        if (!$product) {
+            $this->deleteMessage($messageId);
+            $this->Alert("خطا: محصول یافت نشد.", false);
+            return;
+        }
 
         if (!isset($cart[$productId])) {
             $this->deleteMessage($messageId);
@@ -2091,7 +2098,9 @@ class BotHandler
         }
 
         $quantity = $cart[$productId];
+        $product['quantity'] = $quantity; 
 
+        $newText = $this->generateProductCardText($product); 
         $newKeyboard = [
             'inline_keyboard' => [
                 [
@@ -2104,11 +2113,25 @@ class BotHandler
                 ]
             ]
         ];
-       
-        $this->sendRequest('editMessageReplyMarkup', [
-            'chat_id' => $this->chatId,
-            'message_id' => $messageId,
-            'reply_markup' => $newKeyboard
-        ]);
+
+
+        if (!empty($product['image_file_id'])) {
+            
+            $this->sendRequest('editMessageCaption', [
+                'chat_id' => $this->chatId,
+                'message_id' => $messageId,
+                'caption' => $newText,
+                'parse_mode' => 'HTML',
+                'reply_markup' => $newKeyboard
+            ]);
+        } else {
+            $this->sendRequest('editMessageText', [
+                'chat_id' => $this->chatId,
+                'message_id' => $messageId,
+                'text' => $newText,
+                'parse_mode' => 'HTML',
+                'reply_markup' => $newKeyboard
+            ]);
+        }
     }
 }
