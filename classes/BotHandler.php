@@ -223,6 +223,10 @@ class BotHandler
                 return;
             } elseif (strpos($callbackData, 'edit_field_') === 0) {
                 sscanf($callbackData, "edit_field_%[^_]_%d_%d_%d", $field, $productId, $categoryId, $page);
+                if($field === 'imagefileid'){
+                    $field = 'image_file_id';
+                }
+                
                 $fieldMap = [
                     'name' => 'نام',
                     'description' => 'توضیحات',
@@ -1316,7 +1320,7 @@ class BotHandler
                     ['text' => '✏️ ویرایش تعداد', 'callback_data' => "edit_field_count_{$productId}_{$categoryId}_{$page}"],
                     ['text' => '✏️ ویرایش قیمت', 'callback_data' => "edit_field_price_{$productId}_{$categoryId}_{$page}"]
                 ],
-                [['text' => '🖼️ ویرایش عکس', 'callback_data' => "edit_field_image_file_id_{$productId}_{$categoryId}_{$page}"]],
+                [['text' => '🖼️ ویرایش عکس', 'callback_data' => "edit_field_imagefileid_{$productId}_{$categoryId}_{$page}"]],
                 [['text' => '✅ تایید و ذخیره', 'callback_data' => "confirm_product_edit_{$productId}_cat_{$categoryId}_page_{$page}"]],
 
             ]
