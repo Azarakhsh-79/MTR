@@ -1020,9 +1020,7 @@ class BotHandler
 
     public function showCart($messageId = null): void
     {
-        if ($messageId) {
-            $this->deleteMessage($messageId);
-        }
+
 
         $user = DB::table('users')->findById($this->chatId);
         $cart = json_decode($user['cart'] ?? '{}', true);
@@ -1099,13 +1097,22 @@ class BotHandler
         $keyboardRows[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
         $keyboard = ['inline_keyboard' => $keyboardRows];
 
-
-        $this->sendRequest("sendMessage", [
-            'chat_id' => $this->chatId,
-            'text' => $text,
-            'parse_mode' => 'HTML',
-            'reply_markup' => json_encode($keyboard)
-        ]);
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                'chat_id' => $this->chatId,
+                "message_id" => $messageId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'reply_markup' => json_encode($keyboard)
+            ]);
+        } else {
+            $this->sendRequest("sendMessage", [
+                'chat_id' => $this->chatId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'reply_markup' => json_encode($keyboard)
+            ]);
+        }
     }
 
 
