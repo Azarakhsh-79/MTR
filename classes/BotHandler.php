@@ -171,6 +171,21 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
+            } elseif ($callbackData === 'show_favorites') {
+                $this->showFavoritesList($messageId);
+                return;
+            } elseif ($callbackData === 'show_cart') {
+                $this->showCart($messageId);
+                return;
+            } elseif ($callbackData === 'clear_cart') {
+                DB::table('users')->update($this->chatId, ['cart' => '[]']);
+                $this->Alert("🗑 سبد خرید شما با موفقیت خالی شد.");
+                $this->showCart($messageId);
+                return;
+            } elseif ($callbackData === 'checkout') {
+                $this->Alert("این بخش هنوز آماده نیست. در حال انتقال به درگاه پرداخت...");
+                // $this->zarinpalPaymentHandler->startPayment(...);
+                return;
             } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
                 sscanf($callbackData, "admin_edit_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
                 if ($productId && $categoryId && $page) {
@@ -367,6 +382,29 @@ class BotHandler
                 if ($categoryId && $page) {
                     $this->showUserProductList($categoryId, $page, $messageId);
                 }
+                return;
+            } elseif (str_starts_with($callbackData, 'toggle_favorite_')) {
+                $productId = (int)str_replace('toggle_favorite_', '', $callbackData);
+                $product = DB::table('products')->findById($productId);
+
+                if (!$product) {
+                    $this->Alert("❌ محصول یافت نشد.");
+                    return;
+                }
+
+                $user = DB::table('users')->findById($this->chatId);
+                $favorites = json_decode($user['favorites'] ?? '[]', true);
+
+                if (in_array($productId, $favorites)) {
+                    $favorites = array_diff($favorites, [$productId]);
+                    $message = "محصول \"{$product['name']}\" از علاقه‌مندی‌های شما حذف شد.";
+                } else {
+                    $favorites[] = $productId;
+                    $message = "محصول \"{$product['name']}\" به علاقه‌مندی‌های شما اضافه شد.";
+                }
+
+                DB::table('users')->update($this->chatId, ['favorites' => json_encode(array_values($favorites))]);
+                $this->Alert("❤️ " . $message);
                 return;
             } elseif (str_starts_with($callbackData, 'add_to_cart_')) {
                 $productId = (int)str_replace('add_to_cart_', '', $callbackData);
@@ -600,6 +638,13 @@ class BotHandler
             }
         }
 
+        $userActionButtons = [
+            ['text' => '❤️ علاقه‌مندی‌ها', 'callback_data' => 'show_favorites'],
+            ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
+        ];
+        $categoryButtons[] = $userActionButtons;
+
+
         $user = DB::table('users')->findById($this->chatId);
         if ($user && !empty($user['is_admin'])) {
             $categoryButtons[] = [['text' => '🔐 ورود به پنل مدیریت', 'callback_data' => 'admin_panel_entry']];
@@ -620,6 +665,94 @@ class BotHandler
         } else {
             $this->sendRequest("sendMessage", $data);
         }
+    }
+
+    public function showFavoritesList($messageId = null): void
+    {
+        if ($messageId) {
+            $this->deleteMessage($messageId);
+        }
+
+        $user = DB::table('users')->findById($this->chatId);
+        $favorites = json_decode($user['favorites'] ?? '[]', true);
+
+        if (empty($favorites)) {
+            $this->Alert("❤️ لیست علاقه‌مندی‌های شما خالی است.");
+            $this->MainMenu();
+            return;
+        }
+
+        $text = "❤️ لیست علاقه‌مندی‌های شما:\n\n";
+        $allProducts = DB::table('products')->all();
+
+        foreach ($favorites as $productId) {
+            if (isset($allProducts[$productId])) {
+                $product = $allProducts[$productId];
+                $text .= "- " . $product['name'] . " (" . number_format($product['price']) . " تومان)\n";
+            }
+        }
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
+            ]
+        ];
+
+        $this->sendRequest("sendMessage", [
+            'chat_id' => $this->chatId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => $keyboard
+        ]);
+    }
+
+
+    public function showCart($messageId = null): void
+    {
+        if ($messageId) {
+            $this->deleteMessage($messageId);
+        }
+
+        $user = DB::table('users')->findById($this->chatId);
+        $cart = json_decode($user['cart'] ?? '{}', true);
+
+        if (empty($cart)) {
+            $this->Alert("🛒 سبد خرید شما خالی است.");
+            $this->MainMenu();
+            return;
+        }
+
+        $text = "🛒 **سبد خرید شما:**\n\n";
+        $allProducts = DB::table('products')->all();
+        $totalPrice = 0;
+
+        foreach ($cart as $productId => $quantity) {
+            if (isset($allProducts[$productId])) {
+                $product = $allProducts[$productId];
+                $itemPrice = $product['price'] * $quantity;
+                $totalPrice += $itemPrice;
+                $text .= "- " . $product['name'] . "\n";
+                $text .= "  (تعداد: {$quantity} عدد) - قیمت: " . number_format($itemPrice) . " تومان\n";
+            }
+        }
+
+        $text .= "\n--------------------\u{200F}\n";
+        $text .= "💰 **جمع کل:** " . number_format($totalPrice) . " تومان";
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '💳 پرداخت نهایی', 'callback_data' => 'checkout']],
+                [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart']],
+                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
+            ]
+        ];
+
+        $this->sendRequest("sendMessage", [
+            'chat_id' => $this->chatId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => $keyboard
+        ]);
     }
     public function showAdminMainMenu($messageId = null): void
     {
@@ -1417,6 +1550,7 @@ class BotHandler
             $productKeyboard = [
                 'inline_keyboard' => [
                     [
+                        ['text' => '❤️', 'callback_data' => 'toggle_favorite_' . $product['id']],
                         ['text' => '🛒 افزودن به سبد خرید', 'callback_data' => 'add_to_cart_' . $product['id']]
                     ]
                 ]
