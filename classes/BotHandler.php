@@ -401,6 +401,8 @@ class BotHandler
                     $cart[$productId]++;
                     DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
                     $this->refreshProductCard($productId, $messageId);
+                    $this->Alert("به سبد خرید اضافه شد", false);
+
                 }
                 return;
             } elseif (str_starts_with($callbackData, 'cart_decrease_')) {
@@ -413,8 +415,11 @@ class BotHandler
                     if ($cart[$productId] <= 0) {
                         unset($cart[$productId]);
                     }
+                    
                     DB::table('users')->update($this->chatId, ['cart' => json_encode($cart)]);
                     $this->refreshProductCard($productId, $messageId);
+                    $this->Alert("از سبد خرید کم شد", false);
+
                 }
                 return;
             } elseif (str_starts_with($callbackData, 'category_')) {
@@ -801,7 +806,7 @@ class BotHandler
                 $quantity = $cart[$productId];
                 $keyboardRows[] = [
                     ['text' => '➕', 'callback_data' => "cart_increase_{$productId}"],
-                    ['text' => "{$quantity} عدد", 'callback_data' => 'show_cart'],
+                    ['text' => "{$quantity} عدد", 'callback_data' => 'nope'],
                     ['text' => '➖', 'callback_data' => "cart_decrease_{$productId}"]
                 ];
             } else {
