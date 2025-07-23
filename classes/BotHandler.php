@@ -284,12 +284,13 @@ class BotHandler
                 return;
             } elseif ($callbackData === 'complete_shipping_info' || $callbackData === 'edit_shipping_info') {
                 DB::table('users')->update($this->chatId, ['state' => 'entering_shipping_name', 'state_data' => '[]']);
-                $this->sendRequest("editMessageText", [
+                $res = $this->sendRequest("editMessageText", [
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => "لطفاً نام و نام خانوادگی کامل گیرنده را وارد کنید:",
                     'reply_markup' => ['inline_keyboard' => [[['text' => '❌ انصراف', 'callback_data' => 'show_cart']]]]
                 ]);
+                $this->saveMessageId($this->chatId, $res['result']['message_id'] ?? null);
                 return;
             } elseif ($callbackData === 'checkout') {
                 $this->Alert("این بخش هنوز آماده نیست. در حال انتقال به درگاه پرداخت...");
