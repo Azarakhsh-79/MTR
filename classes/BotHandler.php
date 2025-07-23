@@ -234,7 +234,8 @@ class BotHandler
                     'card_number' => 'شماره کارت (بدون فاصله)',
                     'card_holder_name' => 'نام و نام خانوادگی صاحب حساب',
                     'support_id' => 'آیدی پشتیبانی تلگرام (با @)',
-                    'store_rules' => 'قوانین فروشگاه (متن کامل)'
+                    'store_rules' => 'قوانین فروشگاه (متن کامل)',
+                    'channel_id' => 'آیدی کانال فروشگاه (با @)',
                 ];
 
                 if (!isset($fieldMap[$key])) {
@@ -835,6 +836,7 @@ class BotHandler
     public function MainMenu($messageId = null): void
     {
         $settings = DB::table('settings')->all();
+        $channelId = $settings['channel_id'] ?? null;
         $hour = (int) jdf::jdate('H');
         $defaultWelcome = match (true) {
             $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟",
@@ -871,16 +873,24 @@ class BotHandler
             }
         }
 
-        $categoryButtons[] = [
+        $userActionButtons = [
             ['text' => '❤️ علاقه‌مندی‌ها', 'callback_data' => 'show_favorites'],
             ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
         ];
-        $categoryButtons[] = [['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search']];
-
+        $categoryButtons[] = $userActionButtons;
         $categoryButtons[] = [
-            ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us'],
-            ['text' => '📞 پشتیبانی', 'callback_data' => 'contact_support']
+            ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search'],
+            ['text' => '📞 پشتیبانی', 'callback_data' => 'show_support']
         ];
+        $categoryButtons[] = [
+            ['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules'],
+            ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us']
+        ];
+
+        if (!empty($channelId)) {
+            $channelUsername = str_replace('@', '', $channelId);
+            $categoryButtons[] = [['text' => '📢 عضویت در کانال فروشگاه', 'url' => "https://t.me/{$channelUsername}"]];
+        }
 
         $categoryButtons[] = [['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules']];
 
