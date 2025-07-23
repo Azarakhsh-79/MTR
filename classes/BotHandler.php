@@ -1546,22 +1546,28 @@ class BotHandler
                 break;
         }
     }
-
     private function generateProductCardText(array $product): string
     {
-        // کاراکترهای BiDi برای راست‌چین کردن متن
+
         $rtl_on  = "\u{202B}";
         $rtl_off = "\u{202C}";
 
-        $name        = htmlspecialchars($product['name']);
-        $desc        = htmlspecialchars($product['description'] ?? 'توضیحی ثبت نشده');
-        $count       = (int) ($product['count'] ?? 0);
+        $name        = $product['name'];
+        $desc        = $product['description'] ?? 'توضیحی ثبت نشده';
         $price       = number_format($product['price']);
 
         $text = $rtl_on;
         $text .= "🛍️ <b>{$name}</b>\n\n";
         $text .= "ℹ️ {$desc}\n\n";
-        $text .= "📦 <b>موجودی:</b> {$count} عدد\n";
+
+        if (isset($product['quantity'])) {
+
+            $quantity = (int)$product['quantity'];
+            $text .= "🔢 <b>تعداد در سبد:</b> {$quantity} عدد\n";
+        } else {
+            $count = (int)($product['count'] ?? 0);
+            $text .= "📦 <b>موجودی:</b> {$count} عدد\n";
+        }
         $text .= "💵 <b>قیمت:</b> {$price} تومان";
         $text .= $rtl_off;
 
@@ -2086,7 +2092,7 @@ class BotHandler
 
         $quantity = $cart[$productId];
 
-       
+
         $newKeyboard = [
             [
 
