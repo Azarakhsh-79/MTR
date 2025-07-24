@@ -948,7 +948,8 @@ class BotHandler
         $settings = DB::table('settings')->all();
         $channelId = $settings['channel_id'] ?? null;
 
-        $hour = (int) jdf::jdate('H');
+        //                              ↓↓↓↓↓ پارامتر پنجم برای انگلیسی کردن اعداد
+        $hour = (int) jdf::jdate('H', '', '', '', 'en');
         $defaultWelcome = match (true) {
             $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟" . $hour,
             $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉" . $hour,
