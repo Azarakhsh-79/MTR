@@ -594,21 +594,22 @@ class BotHandler
             } elseif ($callbackData === 'admin_manage_invoices') {
                 $this->showInvoiceManagementMenu($messageId);
                 return;
-           } elseif (str_starts_with($callbackData, 'admin_list_invoices_')) {
+            } elseif (str_starts_with($callbackData, 'admin_list_invoices_')) {
                 $parts = explode('_', $callbackData);
-                
-                $page = (int)array_pop($parts); 
-                array_pop($parts); 
+
+                $page = (int)array_pop($parts);
+                array_pop($parts);
                 $status = implode('_', array_slice($parts, 3));
                 if ($status && $page) {
                     $this->showInvoiceListByStatus($status, $page, $messageId);
                 }
                 return;
-            
-            } elseif (str_starts_with($callbackData, 'admin_view_invoice_')) {
-                // admin_view_invoice_{invoiceId}_{status}_{page}
-                sscanf($callbackData, "admin_view_invoice_%[^_]_%[^_]_%d", $invoiceId, $fromStatus, $fromPage);
-                if ($invoiceId && $fromStatus && $fromPage) {
+            } elseif (str_starts_with($callbackData, 'admin_view_invoice:')) {
+                $parts = explode(':', $callbackData);
+                if (count($parts) === 4) {
+                    $invoiceId = $parts[1];
+                    $fromStatus = $parts[2];
+                    $fromPage = (int)$parts[3];
                     $this->showAdminInvoiceDetails($invoiceId, $fromStatus, $fromPage, $messageId);
                 }
                 return;
@@ -1477,7 +1478,7 @@ class BotHandler
             ]);
         }
     }
-    
+
     public function showInvoiceManagementMenu($messageId = null): void
     {
         $text = "🧾 بخش مدیریت فاکتورها.\n\nلطفاً وضعیت فاکتورهایی که می‌خواهید مشاهده کنید را انتخاب نمایید:";
@@ -1508,7 +1509,7 @@ class BotHandler
         }
     }
 
-   
+
     public function showInvoiceListByStatus(string $status, int $page = 1, $messageId = null): void
     {
         if ($status === 'all') {
@@ -1546,7 +1547,8 @@ class BotHandler
             $cardText .= "💰 <b>مبلغ:</b> " . number_format($invoice['total_amount']) . " تومان\n";
             $cardText .= "📅 <b>تاریخ:</b> " . jdf::jdate('Y/m/d H:i', strtotime($invoice['created_at']));
 
-            $keyboard = [['text' => '👁 مشاهده جزئیات', 'callback_data' => "admin_view_invoice_{$invoice['id']}_{$status}_{$page}"]];
+
+            $keyboard = [['text' => '👁 مشاهده جزئیات', 'callback_data' => "admin_view_invoice:{$invoice['id']}:{$status}:{$page}"]];
 
             $res = $this->sendRequest("sendMessage", [
                 "chat_id" => $this->chatId,
@@ -1594,7 +1596,7 @@ class BotHandler
         }
         $keyboard[] = [['text' => '⬅️ بازگشت به لیست', 'callback_data' => "admin_list_invoices_{$fromStatus}_page_{$fromPage}"]];
 
-        $this->deleteMessage($messageId); 
+        $this->deleteMessage($messageId);
 
         if (!empty($invoice['receipt_file_id'])) {
             $this->sendRequest("sendPhoto", [
