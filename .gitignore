@@ -1,29 +1,26 @@
-
-cache/
-logs/
-*.tmp
-*.bak
-*.swp
-error_log
-log.txt
-cronjobs/error_log
-
-
-*.json
-
-log/
-data/
-vendor/
-composer.lock
-composer.phar
-
-
-assets/styles/*.php
-
-
+# System & editor files
+.DS_Store
 .idea/
 *.iml
-.DS_Store
+*.swp
+*.bak
+*.tmp
 
+# Logs & temp files
+log.txt
+logs/
+error_log
+cronjobs/error_log
 
+# Data & environment
 .env
+data/
+*.json
+
+# Composer
+/vendor/
+/composer.lock
+/composer.phar
+
+# Project-specific
+assets/styles/*.php

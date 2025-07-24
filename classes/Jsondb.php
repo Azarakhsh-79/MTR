@@ -1,24 +1,35 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Bot;
 
-use Exception;
+use InvalidArgumentException;
+use RuntimeException;
+
 
 class JsonDB
 {
+   
+    private  $filePath;
 
-    private string $dataDir;
+    
+    private ?array $dataCache = null;
+
+    
     private string $table;
-    private string $filePath;
+    private string $dataDir;
 
+    public function __construct(
+        string $table,
+        string $dataDir = __DIR__ . '/../data/'
+    ) {
+        $this->table = $table;
+        $this->dataDir = $dataDir;
 
-    public function __construct(string $tableName)
-    {
-        if (empty($tableName) || !preg_match('/^[a-zA-Z0-9_]+$/', $tableName)) {
-            throw new Exception("نام جدول نامعتبر است.");
+        if (empty($this->table) || !preg_match('/^[a-zA-Z0-9_]+$/', $this->table)) {
+            throw new InvalidArgumentException("نام جدول نامعتبر است.");
         }
-        $this->table = $tableName;
-        $this->dataDir = __DIR__ . '/../data/';
 
         if (!is_dir($this->dataDir)) {
             mkdir($this->dataDir, 0775, true);
@@ -28,8 +39,7 @@ class JsonDB
         date_default_timezone_set('Asia/Tehran');
     }
 
-
-    public function insert(array $data)
+    public function insert(array $data): string
     {
         $allData = $this->getAllData();
 
@@ -42,47 +52,44 @@ class JsonDB
         return $id;
     }
 
-    public function findById($id): ?array
+    public function findById(string|int $id): ?array
     {
-        $allData = $this->getAllData();
-        return $allData[$id] ?? null;
+        return $this->getAllData()[$id] ?? null;
     }
 
     public function find(array $criteria): array
     {
         $allData = $this->getAllData();
-        $results = [];
 
-        foreach ($allData as $record) {
-            $match = true;
+        $results = array_filter($allData, function ($record) use ($criteria) {
             foreach ($criteria as $key => $value) {
                 if (!isset($record[$key]) || $record[$key] !== $value) {
-                    $match = false;
-                    break;
+                    return false; 
                 }
             }
-            if ($match) {
-                $results[] = $record;
-            }
-        }
+            return true; 
+        });
 
-        return $results;
+        return array_values($results);
     }
 
-    public function unsetKey($id, string $key): bool
+    public function unsetKey(string|int $id, string $key): bool
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
             return false;
         }
+
         if (array_key_exists($key, $allData[$id])) {
             unset($allData[$id][$key]);
+            $this->saveAllData($allData);
         }
-        $this->saveAllData($allData);
+
         return true;
     }
 
-    public function update($id, array $newData): bool
+ 
+    public function update(string|int $id, array $newData): bool
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
@@ -95,7 +102,8 @@ class JsonDB
         return true;
     }
 
-    public function delete($id): bool
+  
+    public function delete(string|int $id): bool
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
@@ -107,13 +115,16 @@ class JsonDB
 
         return true;
     }
-     public function set(string $key, $value): void
+
+   
+    public function set(string $key, mixed $value): void
     {
         $allData = $this->getAllData();
         $allData[$key] = $value;
         $this->saveAllData($allData);
     }
 
+  
     public function all(): array
     {
         return $this->getAllData();
@@ -121,42 +132,47 @@ class JsonDB
 
     private function getAllData(): array
     {
+        if ($this->dataCache !== null) {
+            return $this->dataCache;
+        }
+
         if (!file_exists($this->filePath)) {
-            return [];
+            return $this->dataCache = []; 
         }
 
         $content = file_get_contents($this->filePath);
         if ($content === false) {
-            return [];
+            throw new RuntimeException("امکان خواندن فایل وجود ندارد: " . $this->filePath);
+        }
+
+        if (trim($content) === '') {
+            return $this->dataCache = [];
         }
 
         $data = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log("خطا در خواندن فایل JSON: " . json_last_error_msg() . " در فایل: " . $this->filePath);
-            return [];
+            throw new RuntimeException(
+                "خطا در تجزیه JSON: " . json_last_error_msg() . " در فایل: " . $this->filePath
+            );
         }
 
-        return $data ?? [];
+        return $this->dataCache = $data ?? [];
     }
 
     private function saveAllData(array $data): void
     {
+        $this->dataCache = $data;
+
         $jsonData = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
-        $file = fopen($this->filePath, 'c+');
-        if ($file === false) {
-            error_log("امکان باز کردن فایل برای نوشتن وجود ندارد: " . $this->filePath);
-            return;
+        if ($jsonData === false) {
+            throw new RuntimeException('خطا در تبدیل داده به JSON: ' . json_last_error_msg());
         }
 
-        if (flock($file, LOCK_EX)) {
-            ftruncate($file, 0);
-            fwrite($file, $jsonData);
-            fflush($file);
-            flock($file, LOCK_UN);
-        }
+        $result = file_put_contents($this->filePath, $jsonData, LOCK_EX);
 
-        fclose($file);
+        if ($result === false) {
+            throw new RuntimeException("امکان نوشتن در فایل وجود ندارد: " . $this->filePath);
+        }
     }
 }
