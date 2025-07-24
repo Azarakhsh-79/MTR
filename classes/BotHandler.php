@@ -229,7 +229,7 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
-            } elseif ($callbackData === 'my_orders') { 
+            } elseif ($callbackData === 'my_orders') {
                 $this->showMyOrdersList(1, $messageId);
                 return;
             } elseif (str_starts_with($callbackData, 'my_orders_page_')) {
@@ -240,7 +240,7 @@ class BotHandler
                 $invoiceId = str_replace('show_order_details_', '', $callbackData);
                 $this->showSingleOrderDetails($invoiceId, $messageId);
                 return;
-            } elseif ($callbackData === 'contact_support') { 
+            } elseif ($callbackData === 'contact_support') {
                 $this->showSupportInfo($messageId);
                 return;
             } elseif ($callbackData === 'contact_support') {
@@ -1102,16 +1102,19 @@ class BotHandler
         $totalPages = ceil(count($allInvoices) / $perPage);
         $offset = ($page - 1) * $perPage;
         $invoicesOnPage = array_slice($allInvoices, $offset, $perPage);
-
+        $newMessageIds = [];
         $text = "لیست سفارشات شما (صفحه {$page} از {$totalPages}):";
         if ($messageId) {
-            $this->sendRequest("editMessageText", ['chat_id' => $this->chatId, 'message_id' => $messageId, 'text' => $text, 'reply_markup' => ['inline_keyboard' => []]]);
+            $res = $this->sendRequest("editMessageText", ['chat_id' => $this->chatId, 'message_id' => $messageId, 'text' => $text, 'reply_markup' => ['inline_keyboard' => []]]);
+            if (isset($res['result']['message_id'])) {
+                $newMessageIds[] = $res['result']['message_id'];
+            }
         } else {
             $user = DB::table('users')->findById($this->chatId);
             if (!empty($user['message_ids'])) $this->deleteMessages($user['message_ids']);
         }
 
-        $newMessageIds = [];
+
 
         foreach ($invoicesOnPage as $invoice) {
             $invoiceText = $this->generateInvoiceCardText($invoice);
@@ -2901,7 +2904,7 @@ class BotHandler
 
         $keyboard = [
             'inline_keyboard' => [
-                [['text' => '📸 ارسال رسید پرداخت', 'callback_data' => 'upload_receipt_' . $newInvoiceId]]
+                [['text' => '📸 ارسال رسید پرداخت', 'callback_data' => 'upload_receipt_' . $newInvoiceId]],
             ]
         ];
 
