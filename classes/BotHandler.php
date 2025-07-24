@@ -116,9 +116,9 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['state' => '']);
 
                 $this->Alert("✅ رسید شما با موفقیت دریافت شد. پس از بررسی، نتیجه به شما اطلاع داده خواهد شد. سپاس از خرید شما!");
+                $this->notifyAdminOfNewReceipt($invoiceId, $receiptFileId);
                 $this->MainMenu();
 
-                $this->notifyAdminOfNewReceipt($invoiceId, $receiptFileId);
 
                 return;
             } elseif (strpos($state, 'editing_product_') === 0) {
@@ -2917,7 +2917,7 @@ class BotHandler
     public function notifyAdminOfNewReceipt(string $invoiceId, string $receiptFileId): void
     {
         $settings = DB::table('settings')->all();
-        $adminId = $settings['admin_id'] ?? null;
+        $adminId = $settings['support_id'] ?? null;
         if (empty($adminId)) {
             Logger::log('error', 'notifyAdminOfNewReceipt failed', 'Admin ID is not set in settings.');
             return;
