@@ -1,9 +1,9 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
-use Bot\JsonDB;
+use Bot\Jsondb;
 
-class JsonDBTest extends TestCase
+class JsondbTest extends TestCase
 {
     private string $tableName = 'test_table';
 
@@ -17,7 +17,7 @@ class JsonDBTest extends TestCase
 
     public function testInsertAndFindById()
     {
-        $db = new JsonDB($this->tableName);
+        $db = new Jsondb($this->tableName);
         $id = $db->insert(['name' => 'Ali']);
         $record = $db->findById($id);
 
@@ -27,7 +27,7 @@ class JsonDBTest extends TestCase
 
     public function testUpdate()
     {
-        $db = new JsonDB($this->tableName);
+        $db = new Jsondb($this->tableName);
         $id = $db->insert(['name' => 'Old']);
         $db->update($id, ['name' => 'New']);
         $this->assertEquals('New', $db->findById($id)['name']);
@@ -35,14 +35,14 @@ class JsonDBTest extends TestCase
 
     public function testDelete()
     {
-        $db = new JsonDB($this->tableName);
+        $db = new Jsondb($this->tableName);
         $id = $db->insert(['delete_me' => true]);
         $this->assertTrue($db->delete($id));
         $this->assertNull($db->findById($id));
     }
     public function testInsertMultipleUsers()
     {
-        $db = new JsonDB($this->tableName);
+        $db = new Jsondb($this->tableName);
 
         $userCount = 100;
         $ids = [];

@@ -2,15 +2,15 @@
 
 namespace Bot;
 
-use Bot\JsonDB;
+use Bot\Jsondb;
 class DB
 {
     private static $instances = [];
 
-    public static function table(string $tableName): JsonDB
+    public static function table(string $tableName): Jsondb
     {
         if (!isset(self::$instances[$tableName])) {
-            self::$instances[$tableName] = new JsonDB($tableName);
+            self::$instances[$tableName] = new Jsondb($tableName);
         }
         return self::$instances[$tableName];
     }

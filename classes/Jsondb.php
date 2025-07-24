@@ -8,7 +8,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 
-class JsonDB
+class Jsondb
 {
    
     private  $filePath;
