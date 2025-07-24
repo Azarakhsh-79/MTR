@@ -594,13 +594,17 @@ class BotHandler
             } elseif ($callbackData === 'admin_manage_invoices') {
                 $this->showInvoiceManagementMenu($messageId);
                 return;
-            } elseif (str_starts_with($callbackData, 'admin_list_invoices_')) {
-                // admin_list_invoices_{status}_page_{page}
-                sscanf($callbackData, "admin_list_invoices_%[^_]_page_%d", $status, $page);
+           } elseif (str_starts_with($callbackData, 'admin_list_invoices_')) {
+                $parts = explode('_', $callbackData);
+                
+                $page = (int)array_pop($parts); 
+                array_pop($parts); 
+                $status = implode('_', array_slice($parts, 3));
                 if ($status && $page) {
                     $this->showInvoiceListByStatus($status, $page, $messageId);
                 }
                 return;
+            
             } elseif (str_starts_with($callbackData, 'admin_view_invoice_')) {
                 // admin_view_invoice_{invoiceId}_{status}_{page}
                 sscanf($callbackData, "admin_view_invoice_%[^_]_%[^_]_%d", $invoiceId, $fromStatus, $fromPage);
@@ -1473,9 +1477,7 @@ class BotHandler
             ]);
         }
     }
-    /**
-     * منوی اصلی مدیریت فاکتورها را نمایش می‌دهد.
-     */
+    
     public function showInvoiceManagementMenu($messageId = null): void
     {
         $text = "🧾 بخش مدیریت فاکتورها.\n\nلطفاً وضعیت فاکتورهایی که می‌خواهید مشاهده کنید را انتخاب نمایید:";
@@ -1513,7 +1515,7 @@ class BotHandler
             $allInvoices = array_values(DB::table('invoices')->all());
             $statusText = 'همه فاکتورها';
         } else {
-            $allInvoices = array_values(DB::table('invoices')->find(['status' => $status]));
+            $allInvoices = array_values(array: DB::table('invoices')->find(['status' => $status]));
             $statusText = $this->translateInvoiceStatus($status);
         }
         if (empty($allInvoices)) {
