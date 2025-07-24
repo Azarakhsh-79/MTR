@@ -1180,29 +1180,28 @@ class BotHandler
         $storeName = $settings['store_name'] ?? 'فروشگاه ما';
         $date = jdf::jdate('Y/m/d H:i', strtotime($invoice['created_at']));
         $status = $this->translateInvoiceStatus($invoice['status']);
+        $text = "🧾 <b>جزئیات کامل سفارش از {$storeName}</b>\n\n";
+        $text .= "🆔 <b>شماره فاکتور:</b> <code>{$invoiceId}</code>\n";
+        $text .= "📆 <b>تاریخ ثبت:</b> {$date}\n";
+        $text .= "📊 <b>وضعیت فعلی:</b> {$status}\n\n";
 
-        $text = "🧾 جزئیات کامل سفارش از {$storeName}**\n\n";
-        $text .= "🆔 شماره فاکتور: `{$invoiceId}`\n";
-        $text .= "📆 تاریخ ثبت: {$date}\n";
-        $text .= "📊 وضعیت فعلی: {$status}\n\n";
+        $text .= "🚚 <b>مشخصات گیرنده:</b>\n";
+        $text .= "👤 <b>نام:</b> {$invoice['user_info']['name']}\n";
+        $text .= "📞 <b>تلفن:</b> <code>{$invoice['user_info']['phone']}</code>\n";
+        $text .= "📍 <b>آدرس:</b> {$invoice['user_info']['address']}\n\n";
 
-        $text .= "🚚 مشخصات گیرنده:\n";
-        $text .= "👤 نام: {$invoice['user_info']['name']}\n";
-        $text .= "📞 تلفن: {$invoice['user_info']['phone']}\n";
-        $text .= "📍 آدرس: {$invoice['user_info']['address']}\n\n";
-
-        $text .= "📋 لیست اقلام خریداری شده:\n";
+        $text .= "📋 <b>لیست اقلام خریداری شده:</b>\n";
         $totalPrice = 0;
         foreach ($invoice['products'] as $product) {
             $unitPrice = $product['price'];
             $itemPrice = $unitPrice * $product['quantity'];
             $totalPrice += $itemPrice;
 
-            $text .= "🔸 {$product['name']}\n";
+            $text .= "🔸 <b>{$product['name']}</b>\n";
             $text .= "  ➤ تعداد: {$product['quantity']} | قیمت واحد: " . number_format($unitPrice) . " تومان\n";
         }
-        $text .= "\n💰 مبلغ نهایی پرداخت شده:" . number_format($invoice['total_amount']) . " تومان";
-
+        $text .= "\n💰 <b>مبلغ نهایی پرداخت شده:</b> <b>" . number_format($invoice['total_amount']) . " تومان</b>";
+        
         $keyboard = [['text' => '⬅️ بازگشت   ',  'callback_data' => 'show_order_summary_' . $invoiceId]];
 
         $this->sendRequest("editMessageText", [
