@@ -74,6 +74,19 @@ class BotHandler
         $state = $currentUser['state'] ?? '';
 
         try {
+
+
+            if (isset($this->message['web_app_data'])) {
+                $webData = json_decode($this->message['web_app_data']['data'], true);
+
+                // در اینجا، $webData حاوی سبد خرید نهایی شده توسط کاربر است
+                // شما می‌توانید فرآیند پرداخت را با این داده‌ها ادامه دهید
+                // برای مثال:
+                $this->Alert("سبد خرید شما دریافت شد. در حال انتقال به مرحله پرداخت...");
+                $this->initiateCardPaymentFromWebApp($webData); // یک تابع جدید برای این کار می‌سازیم
+
+                return;
+            }
             if (str_starts_with($this->text, "/start")) {
                 $this->deleteMessage($this->messageId);
                 DB::table('users')->update($this->chatId, ['state' => '', 'state_data' => '']);
@@ -1364,94 +1377,130 @@ class BotHandler
     }
 
 
+    // public function showCart($messageId = null): void
+    // {
+    //     $user = DB::table('users')->findById($this->chatId);
+    //     $cart = json_decode($user['cart'] ?? '{}', true);
+
+    //     if (!empty($user['message_ids'])) {
+    //         $this->deleteMessages($user['message_ids']);
+    //     }
+    //     if (empty($cart)) {
+    //         $this->Alert("🛒 سبد خرید شما خالی است.");
+    //         return;
+    //     }
+
+    //     $settings = DB::table('settings')->all();
+    //     $shippingInfoComplete = !empty($user['shipping_name']) && !empty($user['shipping_phone']) && !empty($user['shipping_address']);
+
+    //     $storeName     = $settings['store_name'] ?? 'فروشگاه من';
+    //     $deliveryCost  = (int)($settings['delivery_price'] ?? 0);
+    //     $taxPercent    = (int)($settings['tax_percent'] ?? 0);
+    //     $discountFixed = (int)($settings['discount_fixed'] ?? 0);
+
+    //     $date = jdf::jdate('Y/m/d');
+    //     $invoiceId = $this->chatId;
+
+    //     $text = "🧾 <b>فاکتور خرید از {$storeName}</b>\n";
+    //     $text .= "📆 تاریخ: {$date}\n";
+    //     $text .= "🆔 شماره فاکتور: {$invoiceId}\n\n";
+
+    //     if ($shippingInfoComplete) {
+    //         $text .= "🚚 <b>مشخصات گیرنده:</b>\n";
+    //         $text .= "👤 نام: {$user['shipping_name']}\n";
+    //         $text .= "📞 تلفن: {$user['shipping_phone']}\n";
+    //         $text .= "📍 آدرس: {$user['shipping_address']}\n\n";
+    //     }
+
+    //     $text .= "<b>📋 لیست اقلام:</b>\n";
+    //     $allProducts = DB::table('products')->all();
+    //     $totalPrice = 0;
+
+    //     foreach ($cart as $productId => $quantity) {
+    //         if (isset($allProducts[$productId])) {
+    //             $product = $allProducts[$productId];
+    //             $unitPrice = $product['price'];
+    //             $itemPrice = $unitPrice * $quantity;
+    //             $totalPrice += $itemPrice;
+
+    //             $text .= "🔸 {$product['name']}\n";
+    //             $text .= "  ➤ تعداد: {$quantity} | قیمت واحد: " . number_format($unitPrice) . " تومان\n";
+    //             $text .= "  💵 مجموع: " . number_format($itemPrice) . " تومان\n\n";
+    //         }
+    //     }
+
+    //     $taxAmount = round($totalPrice * $taxPercent / 100);
+    //     $grandTotal = $totalPrice + $taxAmount + $deliveryCost - $discountFixed;
+
+    //     $text .= "📦 هزینه ارسال: " . number_format($deliveryCost) . " تومان\n";
+    //     $text .= "💸 تخفیف: " . number_format($discountFixed) . " تومان\n";
+    //     $text .= "📊 مالیات ({$taxPercent}%): " . number_format($taxAmount) . " تومان\n";
+    //     $text .= "💰 <b>مبلغ نهایی قابل پرداخت:</b> <b>" . number_format($grandTotal) . "</b> تومان";
+
+
+    //     $keyboardRows = [];
+    //     if ($shippingInfoComplete) {
+
+    //         $keyboardRows[] = [['text' => '💳 پرداخت نهایی', 'callback_data' => 'checkout']];
+    //         $keyboardRows[] = [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'], ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart']];
+    //         $keyboardRows[] = [['text' => '📝 ویرایش اطلاعات ارسال', 'callback_data' => 'edit_shipping_info']];
+    //     } else {
+    //         $keyboardRows[] = [['text' => '📝 تکمیل اطلاعات ارسال', 'callback_data' => 'complete_shipping_info']];
+    //         $keyboardRows[] = [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'], ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart']];
+    //     }
+
+    //     $keyboardRows[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
+    //     $keyboard = ['inline_keyboard' => $keyboardRows];
+
+    //     if ($messageId) {
+    //         $this->sendRequest("editMessageText", [
+    //             'chat_id' => $this->chatId,
+    //             "message_id" => $messageId,
+    //             'text' => $text,
+    //             'parse_mode' => 'HTML',
+    //             'reply_markup' => json_encode($keyboard)
+    //         ]);
+    //     } else {
+    //         $this->sendRequest("sendMessage", [
+    //             'chat_id' => $this->chatId,
+    //             'text' => $text,
+    //             'parse_mode' => 'HTML',
+    //             'reply_markup' => json_encode($keyboard)
+    //         ]);
+    //     }
+    // }
+
     public function showCart($messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
         $cart = json_decode($user['cart'] ?? '{}', true);
 
-        if (!empty($user['message_ids'])) {
-            $this->deleteMessages($user['message_ids']);
-        }
         if (empty($cart)) {
             $this->Alert("🛒 سبد خرید شما خالی است.");
             return;
         }
 
-        $settings = DB::table('settings')->all();
-        $shippingInfoComplete = !empty($user['shipping_name']) && !empty($user['shipping_phone']) && !empty($user['shipping_address']);
+        $webAppUrl = "https://www.rammehraz.com/Rambot/test/Amir/MTR/mini_app/cart.html";
 
-        $storeName     = $settings['store_name'] ?? 'فروشگاه من';
-        $deliveryCost  = (int)($settings['delivery_price'] ?? 0);
-        $taxPercent    = (int)($settings['tax_percent'] ?? 0);
-        $discountFixed = (int)($settings['discount_fixed'] ?? 0);
-
-        $date = jdf::jdate('Y/m/d');
-        $invoiceId = $this->chatId;
-
-        $text = "🧾 <b>فاکتور خرید از {$storeName}</b>\n";
-        $text .= "📆 تاریخ: {$date}\n";
-        $text .= "🆔 شماره فاکتور: {$invoiceId}\n\n";
-
-        if ($shippingInfoComplete) {
-            $text .= "🚚 <b>مشخصات گیرنده:</b>\n";
-            $text .= "👤 نام: {$user['shipping_name']}\n";
-            $text .= "📞 تلفن: {$user['shipping_phone']}\n";
-            $text .= "📍 آدرس: {$user['shipping_address']}\n\n";
-        }
-
-        $text .= "<b>📋 لیست اقلام:</b>\n";
-        $allProducts = DB::table('products')->all();
-        $totalPrice = 0;
-
-        foreach ($cart as $productId => $quantity) {
-            if (isset($allProducts[$productId])) {
-                $product = $allProducts[$productId];
-                $unitPrice = $product['price'];
-                $itemPrice = $unitPrice * $quantity;
-                $totalPrice += $itemPrice;
-
-                $text .= "🔸 {$product['name']}\n";
-                $text .= "  ➤ تعداد: {$quantity} | قیمت واحد: " . number_format($unitPrice) . " تومان\n";
-                $text .= "  💵 مجموع: " . number_format($itemPrice) . " تومان\n\n";
-            }
-        }
-
-        $taxAmount = round($totalPrice * $taxPercent / 100);
-        $grandTotal = $totalPrice + $taxAmount + $deliveryCost - $discountFixed;
-
-        $text .= "📦 هزینه ارسال: " . number_format($deliveryCost) . " تومان\n";
-        $text .= "💸 تخفیف: " . number_format($discountFixed) . " تومان\n";
-        $text .= "📊 مالیات ({$taxPercent}%): " . number_format($taxAmount) . " تومان\n";
-        $text .= "💰 <b>مبلغ نهایی قابل پرداخت:</b> <b>" . number_format($grandTotal) . "</b> تومان";
-
-
-        $keyboardRows = [];
-        if ($shippingInfoComplete) {
-
-            $keyboardRows[] = [['text' => '💳 پرداخت نهایی', 'callback_data' => 'checkout']];
-            $keyboardRows[] = [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'], ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart']];
-            $keyboardRows[] = [['text' => '📝 ویرایش اطلاعات ارسال', 'callback_data' => 'edit_shipping_info']];
-        } else {
-            $keyboardRows[] = [['text' => '📝 تکمیل اطلاعات ارسال', 'callback_data' => 'complete_shipping_info']];
-            $keyboardRows[] = [['text' => '🗑 خالی کردن سبد', 'callback_data' => 'clear_cart'], ['text' => '✏️ ویرایش سبد خرید', 'callback_data' => 'edit_cart']];
-        }
-
-        $keyboardRows[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
-        $keyboard = ['inline_keyboard' => $keyboardRows];
+        $text = "🛒 برای مشاهده و مدیریت سبد خرید خود، لطفاً روی دکمه زیر کلیک کنید:";
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '🛍️ مشاهده سبد خرید پیشرفته', 'web_app' => ['url' => $webAppUrl]]],
+                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
+            ]
+        ];
 
         if ($messageId) {
             $this->sendRequest("editMessageText", [
                 'chat_id' => $this->chatId,
                 "message_id" => $messageId,
                 'text' => $text,
-                'parse_mode' => 'HTML',
                 'reply_markup' => json_encode($keyboard)
             ]);
         } else {
             $this->sendRequest("sendMessage", [
                 'chat_id' => $this->chatId,
                 'text' => $text,
-                'parse_mode' => 'HTML',
                 'reply_markup' => json_encode($keyboard)
             ]);
         }
@@ -2681,6 +2730,8 @@ class BotHandler
         ]);
     }
 
+
+
     public function showCartInEditMode($messageId): void
     {
         $this->deleteMessage($messageId);
@@ -3169,4 +3220,117 @@ class BotHandler
 
         return null;
     }
+    /**
+ * فرآیند پرداخت را بر اساس داده‌های دریافتی از وب اپ (مینی اپ) آغاز می‌کند.
+ * @param array $webData داده‌های سبد خرید که از مینی اپ ارسال شده است.
+ */
+public function initiateCardPaymentFromWebApp(array $webData): void
+{
+    // ۱. بررسی اولیه داده‌های ورودی از وب اپ
+    if (empty($webData['products'])) {
+        $this->Alert("خطا: سبد خرید خالی است یا اطلاعات به درستی از اپلیکیشن وب دریافت نشد.");
+        return;
+    }
+
+    $user = DB::table('users')->findById($this->chatId);
+    $settings = DB::table('settings')->all();
+
+    // ۲. بررسی وجود اطلاعات ضروری (اطلاعات کارت فروشگاه و اطلاعات ارسال کاربر)
+    $cardNumber = $settings['card_number'] ?? null;
+    $cardHolderName = $settings['card_holder_name'] ?? null;
+    if (empty($cardNumber) || empty($cardHolderName)) {
+        $this->Alert("متاسفانه اطلاعات کارت فروشگاه تنظیم نشده است. لطفاً به مدیریت اطلاع دهید.");
+        return;
+    }
+    // فرض می‌کنیم اطلاعات ارسال قبلاً از کاربر گرفته شده است.
+    if (empty($user['shipping_name']) || empty($user['shipping_phone']) || empty($user['shipping_address'])) {
+        $this->Alert("اطلاعات ارسال شما کامل نیست. لطفاً ابتدا اطلاعات ارسال خود را تکمیل کنید.");
+        $this->MainMenu(); // بازگشت به منوی اصلی
+        return;
+    }
+
+    // ۳. محاسبه مجدد مبلغ نهایی در سمت سرور (برای امنیت)
+    $deliveryCost  = (int)($settings['delivery_price'] ?? 0);
+    $taxPercent    = (int)($settings['tax_percent'] ?? 0);
+    $allProductsDB = DB::table('products')->all();
+    
+    $totalPrice = 0;
+    $productsDetailsForInvoice = [];
+
+    foreach ($webData['products'] as $productFromWebApp) {
+        $productId = $productFromWebApp['id'];
+        $quantity = $productFromWebApp['quantity'];
+
+        // نکته امنیتی: قیمت را از دیتابیس خودمان می‌خوانیم، نه از ورودی کاربر
+        if (isset($allProductsDB[$productId])) {
+            $productDB = $allProductsDB[$productId];
+            $itemPrice = $productDB['price'] * $quantity;
+            $totalPrice += $itemPrice;
+            $productsDetailsForInvoice[] = [
+                'id' => $productId,
+                'name' => $productDB['name'],
+                'quantity' => $quantity,
+                'price' => $productDB['price']
+            ];
+        }
+    }
+
+    if (empty($productsDetailsForInvoice)) {
+         $this->Alert("خطا: محصولات موجود در سبد خرید شما معتبر نیستند.");
+         return;
+    }
+
+    $taxAmount = round($totalPrice * $taxPercent / 100);
+    $grandTotal = $totalPrice + $taxAmount + $deliveryCost;
+
+    // ۴. ایجاد فاکتور جدید در جدول invoices
+    $invoices = DB::table('invoices');
+    $newInvoiceId = uniqid('inv_');
+    $invoiceData = [
+        'id' => $newInvoiceId,
+        'user_id' => $this->chatId,
+        'user_info' => [
+            'name' => $user['shipping_name'],
+            'phone' => $user['shipping_phone'],
+            'address' => $user['shipping_address']
+        ],
+        'products' => $productsDetailsForInvoice,
+        'total_amount' => $grandTotal,
+        'status' => 'pending_payment',
+        'created_at' => date('Y-m-d H:i:s'),
+        'receipt_file_id' => null
+    ];
+    $invoices->insert($invoiceData);
+
+    // ۵. پاک کردن سبد خرید کاربر در دیتابیس
+    DB::table('users')->update($this->chatId, ['cart' => '[]']);
+
+    // ۶. ارسال پیام دستورالعمل پرداخت برای کاربر (به عنوان یک پیام جدید)
+    $text = "🧾 <b>رسید ثبت سفارش</b>\n";
+    $text .= "━━━━━━━━━━━━━━━━━\n";
+    $text .= "🛒 وضعیت سفارش: <b>ثبت شده</b>\n";
+    $text .= "💰 مبلغ قابل پرداخت: <b>" . number_format($grandTotal) . " تومان</b>\n";
+    $text .= "🕒 زمان ثبت: " . jdf::jdate("Y/m/d - H:i") . "\n";
+    $text .= "━━━━━━━━━━━━━━━━━\n\n";
+
+    $text .= "📌 لطفاً مبلغ فوق را به کارت زیر واریز نمایید و سپس از طریق دکمه‌ی زیر، تصویر رسید پرداخت را برای ما ارسال کنید:\n\n";
+
+    $text .= "💳 <b>شماره کارت:</b>\n<code>{$cardNumber}</code>\n";
+    $text .= "👤 <b>نام صاحب حساب:</b>\n<b>{$cardHolderName}</b>\n\n";
+    $text .= "📦 سفارش شما پس از تأیید پرداخت پردازش و ارسال خواهد شد.";
+
+    $keyboard = [
+        'inline_keyboard' => [
+            [['text' => '📸 ارسال رسید پرداخت', 'callback_data' => 'upload_receipt_' . $newInvoiceId]],
+        ]
+    ];
+
+    // از آنجایی که وب اپ بسته شده، پیام جدید ارسال می‌کنیم و پیام قبلی را ویرایش نمی‌کنیم.
+    $this->sendRequest("sendMessage", [
+        'chat_id' => $this->chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML',
+        'reply_markup' => json_encode($keyboard)
+    ]);
+}
 }

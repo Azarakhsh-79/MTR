@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سبد خرید</title>
+    <link rel="stylesheet" href="cart.css">
+</head>
+<body>
+    <div id="loader">درحال بارگذاری سبد خرید شما...</div>
+    
+    <div id="cart-container" class="hidden">
+        <div id="cart-items">
+            </div>
+        
+        <div id="cart-summary">
+            <div class="summary-row">
+                <span>جمع کل:</span>
+                <span id="subtotal">0 تومان</span>
+            </div>
+            <div class="summary-row total">
+                <span>مبلغ نهایی:</span>
+                <span id="grand-total">0 تومان</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="cart.js"></script>
+</body>
+</html>
