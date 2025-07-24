@@ -591,6 +591,23 @@ class BotHandler
             } elseif ($callbackData === 'admin_panel_entry') {
                 $this->showAdminMainMenu($messageId);
                 return;
+            } elseif ($callbackData === 'admin_manage_invoices') {
+                $this->showInvoiceManagementMenu($messageId);
+                return;
+            } elseif (str_starts_with($callbackData, 'admin_list_invoices_')) {
+                // admin_list_invoices_{status}_page_{page}
+                sscanf($callbackData, "admin_list_invoices_%[^_]_page_%d", $status, $page);
+                if ($status && $page) {
+                    $this->showInvoiceListByStatus($status, $page, $messageId);
+                }
+                return;
+            } elseif (str_starts_with($callbackData, 'admin_view_invoice_')) {
+                // admin_view_invoice_{invoiceId}_{status}_{page}
+                sscanf($callbackData, "admin_view_invoice_%[^_]_%[^_]_%d", $invoiceId, $fromStatus, $fromPage);
+                if ($invoiceId && $fromStatus && $fromPage) {
+                    $this->showAdminInvoiceDetails($invoiceId, $fromStatus, $fromPage, $messageId);
+                }
+                return;
             } elseif ($callbackData === 'show_about_us') {
                 $this->showAboutUs();
                 return;
@@ -1180,7 +1197,7 @@ class BotHandler
         $storeName = $settings['store_name'] ?? 'فروشگاه ما';
         $date = jdf::jdate('Y/m/d H:i', strtotime($invoice['created_at']));
         $status = $this->translateInvoiceStatus($invoice['status']);
-        $text = "🧾 <b>جزئیات کامل سفارش از {$storeName}</b>\n\n";
+        $text = "🧾 <b>{$storeName}</b>\n\n";
         $text .= "🆔 <b>شماره فاکتور:</b> <code>{$invoiceId}</code>\n";
         $text .= "📆 <b>تاریخ ثبت:</b> {$date}\n";
         $text .= "📊 <b>وضعیت فعلی:</b> {$status}\n\n";
@@ -1201,7 +1218,7 @@ class BotHandler
             $text .= "  ➤ تعداد: {$product['quantity']} | قیمت واحد: " . number_format($unitPrice) . " تومان\n";
         }
         $text .= "\n💰 <b>مبلغ نهایی پرداخت شده:</b> <b>" . number_format($invoice['total_amount']) . " تومان</b>";
-        
+
         $keyboard = [['text' => '⬅️ بازگشت   ',  'callback_data' => 'show_order_summary_' . $invoiceId]];
 
         $this->sendRequest("editMessageText", [
@@ -1433,6 +1450,7 @@ class BotHandler
             'inline_keyboard' => [
                 [['text' => '🛍 مدیریت دسته‌بندی‌ها', 'callback_data' => 'admin_manage_categories']],
                 [['text' => '📝 مدیریت محصولات', 'callback_data' => 'admin_manage_products']],
+                [['text' => '🧾 مدیریت فاکتورها', 'callback_data' => 'admin_manage_invoices']],
                 [['text' => '⚙️ تنظیمات ربات', 'callback_data' => 'admin_bot_settings']],
                 [['text' => '📊 آمار و گزارشات', 'callback_data' => 'admin_reports']],
                 [['text' => '🔙 بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
@@ -1454,6 +1472,141 @@ class BotHandler
                 "reply_markup" => $keyboard
             ]);
         }
+    }
+    /**
+     * منوی اصلی مدیریت فاکتورها را نمایش می‌دهد.
+     */
+    public function showInvoiceManagementMenu($messageId = null): void
+    {
+        $text = "🧾 بخش مدیریت فاکتورها.\n\nلطفاً وضعیت فاکتورهایی که می‌خواهید مشاهده کنید را انتخاب نمایید:";
+        $keyboard = [
+            'inline_keyboard' => [
+                // دکمه برای فاکتورهایی که نیاز به بررسی دارند (مهم‌ترین)
+                [['text' => '🔎 فاکتورهای در حال بررسی', 'callback_data' => 'admin_list_invoices_payment_review_page_1']],
+                // سایر وضعیت‌ها
+                [['text' => '✅ تایید شده', 'callback_data' => 'admin_list_invoices_approved_page_1'], ['text' => '❌ رد شده', 'callback_data' => 'admin_list_invoices_rejected_page_1']],
+                [['text' => '⏳ در انتظار پرداخت', 'callback_data' => 'admin_list_invoices_pending_payment_page_1']],
+                [['text' => '📜 نمایش همه فاکتورها', 'callback_data' => 'admin_list_invoices_all_page_1']],
+
+                [['text' => '⬅️ بازگشت به پنل مدیریت', 'callback_data' => 'admin_panel_entry']]
+            ]
+        ];
+
+        $data = [
+            'chat_id' => $this->chatId,
+            'text' => $text,
+            'reply_markup' => json_encode($keyboard)
+        ];
+
+        if ($messageId) {
+            $data['message_id'] = $messageId;
+            $this->sendRequest("editMessageText", $data);
+        } else {
+            $this->sendRequest("sendMessage", $data);
+        }
+    }
+
+   
+    public function showInvoiceListByStatus(string $status, int $page = 1, $messageId = null): void
+    {
+        if ($status === 'all') {
+            $allInvoices = array_values(DB::table('invoices')->all());
+            $statusText = 'همه فاکتورها';
+        } else {
+            $allInvoices = array_values(DB::table('invoices')->find(['status' => $status]));
+            $statusText = $this->translateInvoiceStatus($status);
+        }
+        if (empty($allInvoices)) {
+            $statusText = $this->translateInvoiceStatus($status);
+            $this->Alert("هیچ فاکتوری با وضعیت '{$statusText}' یافت نشد.");
+            $this->showInvoiceManagementMenu($messageId);
+            return;
+        }
+
+        usort($allInvoices, fn($a, $b) => strtotime($b['created_at']) <=> strtotime($a['created_at']));
+
+        $perPage = 5;
+        $totalPages = ceil(count($allInvoices) / $perPage);
+        $offset = ($page - 1) * $perPage;
+        $invoicesOnPage = array_slice($allInvoices, $offset, $perPage);
+
+        $statusText = $this->translateInvoiceStatus($status);
+        $text = "لیست فاکتورهای <b>{$statusText}</b> (صفحه {$page} از {$totalPages}):";
+
+        $user = DB::table('users')->findById($this->chatId);
+        if (!empty($user['message_ids'])) $this->deleteMessages($user['message_ids']);
+        $res = $this->sendRequest("sendMessage", ['chat_id' => $this->chatId, 'text' => $text, 'parse_mode' => 'HTML']);
+        $newMessageIds = [$res['result']['message_id'] ?? null];
+
+        foreach ($invoicesOnPage as $invoice) {
+            $cardText = "📄 <b>فاکتور:</b> <code>{$invoice['id']}</code>\n";
+            $cardText .= "👤 <b>کاربر:</b> {$invoice['user_info']['name']} (<code>{$invoice['user_id']}</code>)\n";
+            $cardText .= "💰 <b>مبلغ:</b> " . number_format($invoice['total_amount']) . " تومان\n";
+            $cardText .= "📅 <b>تاریخ:</b> " . jdf::jdate('Y/m/d H:i', strtotime($invoice['created_at']));
+
+            $keyboard = [['text' => '👁 مشاهده جزئیات', 'callback_data' => "admin_view_invoice_{$invoice['id']}_{$status}_{$page}"]];
+
+            $res = $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => $cardText,
+                "parse_mode" => "HTML",
+                "reply_markup" => ['inline_keyboard' => [$keyboard]]
+            ]);
+            if (isset($res['result']['message_id'])) $newMessageIds[] = $res['result']['message_id'];
+        }
+
+        $navButtons = [];
+        if ($page > 1) $navButtons[] = ['text' => "▶️ قبل", 'callback_data' => "admin_list_invoices_{$status}_page_" . ($page - 1)];
+        if ($page < $totalPages) $navButtons[] = ['text' => "بعد ◀️", 'callback_data' => "admin_list_invoices_{$status}_page_" . ($page + 1)];
+
+        $navKeyboard = [];
+        if (!empty($navButtons)) $navKeyboard[] = $navButtons;
+        $navKeyboard[] = [['text' => '⬅️ بازگشت به منوی فاکتورها', 'callback_data' => 'admin_manage_invoices']];
+
+        $navMessageRes = $this->sendRequest("sendMessage", [
+            'chat_id' => $this->chatId,
+            'text' => "--- صفحه {$page} ---",
+            'reply_markup' => ['inline_keyboard' => $navKeyboard]
+        ]);
+        if (isset($navMessageRes['result']['message_id'])) $newMessageIds[] = $navMessageRes['result']['message_id'];
+
+        DB::table('users')->update($this->chatId, ['message_ids' => array_filter($newMessageIds)]);
+    }
+
+    public function showAdminInvoiceDetails(string $invoiceId, string $fromStatus, int $fromPage, int $messageId): void
+    {
+        $invoice = DB::table('invoices')->findById($invoiceId);
+        if (!$invoice) {
+            $this->Alert("خطا: فاکتور یافت نشد.");
+            return;
+        }
+
+        $text = $this->notifyAdminOfNewReceipt($invoiceId, null, false);
+
+        $keyboard = [];
+        if ($invoice['status'] === 'payment_review') {
+            $keyboard[] = [
+                ['text' => '✅ تایید فاکتور', 'callback_data' => 'admin_approve_' . $invoiceId],
+                ['text' => '❌ رد فاکتور', 'callback_data' => 'admin_reject_' . $invoiceId]
+            ];
+        }
+        $keyboard[] = [['text' => '⬅️ بازگشت به لیست', 'callback_data' => "admin_list_invoices_{$fromStatus}_page_{$fromPage}"]];
+
+        $this->deleteMessage($messageId); 
+
+        if (!empty($invoice['receipt_file_id'])) {
+            $this->sendRequest("sendPhoto", [
+                'chat_id' => $this->chatId,
+                'photo' => $invoice['receipt_file_id']
+            ]);
+        }
+
+        $this->sendRequest("sendMessage", [
+            'chat_id' => $this->chatId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => json_encode(['inline_keyboard' => $keyboard])
+        ]);
     }
     public function showCategoryList($messageId = null): void
     {
@@ -2946,22 +3099,17 @@ class BotHandler
             'reply_markup' => json_encode($keyboard)
         ]);
     }
-    public function notifyAdminOfNewReceipt(string $invoiceId, string $receiptFileId): void
+    public function notifyAdminOfNewReceipt(string $invoiceId, ?string $receiptFileId, bool $send = true): ?string
     {
         $settings = DB::table('settings')->all();
         $adminId = $settings['support_id'] ?? null;
-        if (empty($adminId)) {
-            Logger::log('error', 'notifyAdminOfNewReceipt failed', 'Admin ID is not set in settings.');
-            return;
-        }
-
         $invoice = DB::table('invoices')->findById($invoiceId);
+
         if (!$invoice) {
             Logger::log('error', 'notifyAdminOfNewReceipt failed', 'Invoice not found.', ['invoice_id' => $invoiceId]);
-            return;
+            return null;
         }
 
-        // نام متغیر از caption به text برای خوانایی بهتر تغییر کرد
         $userInfo = $invoice['user_info'];
         $products = $invoice['products'];
         $totalAmount = number_format($invoice['total_amount']);
@@ -2981,7 +3129,17 @@ class BotHandler
         }
         $text .= "\n";
         $text .= "💰 مبلغ کل پرداخت شده: {$totalAmount} تومان\n\n";
+        $text .= "لطفاً رسید را بررسی و وضعیت فاکتور را مشخص نمایید.";
 
+        // اگر send=false باشد، فقط متن را برمی‌گرداند
+        if (!$send) {
+            return $text;
+        }
+
+        if (empty($adminId)) {
+            Logger::log('error', 'notifyAdminOfNewReceipt failed', 'Admin ID is not set in settings.');
+            return null;
+        }
 
         $keyboard = [
             'inline_keyboard' => [
@@ -2992,16 +3150,8 @@ class BotHandler
             ]
         ];
 
-        $this->sendRequest("sendPhoto", [
-            'chat_id' => $adminId,
-            'photo' => $receiptFileId
-        ]);
+        $this->sendRequest("sendPhoto", ['chat_id' => $adminId, 'photo' => $receiptFileId, 'caption' => $text, 'parse_mode' => 'Markdown', 'reply_markup' => json_encode($keyboard)]);
 
-        $this->sendRequest("sendMessage", [
-            'chat_id' => $adminId,
-            'text' => $text,
-            'parse_mode' => 'HTML',
-            'reply_markup' => json_encode($keyboard)
-        ]);
+        return null;
     }
 }
