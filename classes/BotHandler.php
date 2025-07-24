@@ -1233,8 +1233,6 @@ class BotHandler
             $keyboard['inline_keyboard'][] = [['text' => '📸 ارسال رسید پرداخت', 'callback_data' => 'upload_receipt_' . $invoice['id']]];
         }
 
-        $keyboard['inline_keyboard'][] = [['text' => '⬅️ بازگشت به لیست کل سفارشات', 'callback_data' => 'my_orders']];
-
 
         $this->sendRequest("editMessageText", [
             "chat_id" => $this->chatId,
