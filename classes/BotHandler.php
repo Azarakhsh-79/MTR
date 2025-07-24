@@ -601,11 +601,20 @@ class BotHandler
                 array_pop($parts);
                 $status = implode('_', array_slice($parts, 3));
                 if ($status && $page) {
-                    $this->showInvoiceListByStatus($status, $page, $messageId);
+
+                    if (isset($callbackQuery['message']['photo'])) {
+                        $this->deleteMessage($messageId);
+                        $this->showInvoiceListByStatus($status, $page, null);
+                    } else {
+                        $this->showInvoiceListByStatus($status, $page, $messageId);
+                    }
                 }
                 return;
             } elseif (str_starts_with($callbackData, 'admin_view_invoice:')) {
                 $parts = explode(':', $callbackData);
+                $user = DB::table('users')->findById($this->chatId);
+                if (!empty($user['message_ids'])) $this->deleteMessages($user['message_ids']);
+
                 if (count($parts) === 4) {
                     $invoiceId = $parts[1];
                     $fromStatus = $parts[2];
@@ -1526,6 +1535,7 @@ class BotHandler
             return;
         }
 
+
         usort($allInvoices, fn($a, $b) => strtotime($b['created_at']) <=> strtotime($a['created_at']));
 
         $perPage = 5;
@@ -1594,7 +1604,8 @@ class BotHandler
                 ['text' => '❌ رد فاکتور', 'callback_data' => 'admin_reject_' . $invoiceId]
             ];
         }
-        
+        $keyboard[] = [['text' => '⬅️ بازگشت به لیست', 'callback_data' => "admin_list_invoices:{$fromStatus}:page:{$fromPage}"]];
+
         $this->deleteMessage($messageId);
 
         $requestData = [
