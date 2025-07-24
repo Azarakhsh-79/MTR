@@ -1082,10 +1082,10 @@ class BotHandler
         $totalAmount = number_format($invoice['total_amount']);
         $status = $this->translateInvoiceStatus($invoice['status']);
 
-        $text = "📄 سفارش شماره: {$invoiceId}\u{200F}\n";
-        $text .= "📅 تاریخ ثبت: {$date}\n";
-        $text .= "💰 مبلغ کل: {$totalAmount} تومان\n";
-        $text .= "📊 وضعیت: {$status}";
+        $text = "📄 <b>سفارش شماره:</b> <code>{$invoiceId}</code>\n";
+        $text .= "📅 <b>تاریخ ثبت:</b> {$date}\n";
+        $text .= "💰 <b>مبلغ کل:</b> {$totalAmount} تومان\n";
+        $text .= "📊 <b>وضعیت:</b> {$status}";
 
         return $text;
     }
