@@ -947,26 +947,29 @@ class BotHandler
     {
         $settings = DB::table('settings')->all();
         $channelId = $settings['channel_id'] ?? null;
-       
+
         $hour = (int) jdf::jdate('H');
         $defaultWelcome = match (true) {
-            $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟",
-            $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉",
-            default => "🌙 شب بخیر! شاید وقتشه یه هدیه‌ خاص برای خودت یا عزیزات پیدا کنی...",
+            $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟" . $hour,
+            $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉" . $hour,
+            default => "🌙 شب بخیر! شاید وقتشه یه هدیه‌ خاص برای خودت یا عزیزات پیدا کنی..." . $hour,
         };
-       
-        if($settings['main_menu_text']){
-            $menuText = $settings['main_menu_text'] . "\n\n" . "<blockquote> {$defaultWelcome} </blockquote>";
-        }else{
+
+        if (!empty($settings['main_menu_text'])) {
+            $menuText = $settings['main_menu_text'] . "\n\n" . "<blockquote>{$defaultWelcome}</blockquote>";
+        } else {
             $menuText =  $defaultWelcome;
         }
 
         $allCategories = DB::table('categories')->all();
-        $categoryButtons = [];
+        $categoryButtons = []; // ۱. آرایه دکمه‌ها خالی است
+
+        // ۲. دکمه پیشنهاد ویژه (در صورت وجود) اضافه می‌شود
         if (!empty($settings['daily_offer'])) {
             $categoryButtons[] = [['text' => '🔥 پیشنهاد ویژه امروز', 'callback_data' => 'daily_offer']];
         }
 
+        // ۳. دکمه‌های دسته‌بندی‌ها اضافه می‌شوند
         if (!empty($allCategories)) {
             $activeCategories = [];
             foreach ($allCategories as $category) {
@@ -989,7 +992,8 @@ class BotHandler
             }
         }
 
-        $categoryButtons = [
+        // ۴. دکمه‌های ثابت را تعریف می‌کنیم
+        $staticButtons = [
             [
                 ['text' => '❤️ علاقه‌مندی‌ها', 'callback_data' => 'show_favorites'],
                 ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
@@ -1004,7 +1008,10 @@ class BotHandler
             ]
         ];
 
+        // ۵. دکمه‌های ثابت را به انتهای دکمه‌های قبلی اضافه (merge) می‌کنیم
+        $categoryButtons = array_merge($categoryButtons, $staticButtons);
 
+        // ۶. دکمه‌های کانال و ادمین مثل قبل اضافه می‌شوند
         if (!empty($channelId)) {
             $channelUsername = str_replace('@', '', $channelId);
             $categoryButtons[] = [['text' => '📢 عضویت در کانال فروشگاه', 'url' => "https://t.me/{$channelUsername}"]];
@@ -1031,8 +1038,6 @@ class BotHandler
             $this->sendRequest("sendMessage", $data);
         }
     }
-
-
     public function showFavoritesList($page = 1, $messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
