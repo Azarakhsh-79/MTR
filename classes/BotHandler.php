@@ -1153,14 +1153,12 @@ class BotHandler
         }
         $navKeyboard[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
 
-        $navMessageRes = $this->sendRequest("sendMessage", [
+        $this->sendRequest("sendMessage", [
             'chat_id' => $this->chatId,
             'text' => "--- صفحه {$page} از {$totalPages} ---",
             'reply_markup' => ['inline_keyboard' => $navKeyboard]
         ]);
-        if (isset($navMessageRes['result']['message_id'])) {
-            $newMessageIds[] = $navMessageRes['result']['message_id'];
-        }
+       
 
         DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
     }
