@@ -10,13 +10,13 @@ use RuntimeException;
 
 class Jsondb
 {
-   
+
     private  $filePath;
 
-    
+
     private ?array $dataCache = null;
 
-    
+
     private string $table;
     private string $dataDir;
 
@@ -39,7 +39,7 @@ class Jsondb
         date_default_timezone_set('Asia/Tehran');
     }
 
-    public function insert(array $data): string
+    public function insert(array $data)
     {
         $allData = $this->getAllData();
 
@@ -52,28 +52,28 @@ class Jsondb
         return $id;
     }
 
-    public function findById(string|int $id): ?array
+    public function findById(string|int $id)
     {
         return $this->getAllData()[$id] ?? null;
     }
 
-    public function find(array $criteria): array
+    public function find(array $criteria)
     {
         $allData = $this->getAllData();
 
         $results = array_filter($allData, function ($record) use ($criteria) {
             foreach ($criteria as $key => $value) {
                 if (!isset($record[$key]) || $record[$key] !== $value) {
-                    return false; 
+                    return false;
                 }
             }
-            return true; 
+            return true;
         });
 
         return array_values($results);
     }
 
-    public function unsetKey(string|int $id, string $key): bool
+    public function unsetKey(string|int $id, string $key)
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
@@ -88,8 +88,8 @@ class Jsondb
         return true;
     }
 
- 
-    public function update(string|int $id, array $newData): bool
+
+    public function update(string|int $id, array $newData)
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
@@ -102,8 +102,8 @@ class Jsondb
         return true;
     }
 
-  
-    public function delete(string|int $id): bool
+
+    public function delete(string|int $id)
     {
         $allData = $this->getAllData();
         if (!isset($allData[$id])) {
@@ -116,28 +116,28 @@ class Jsondb
         return true;
     }
 
-   
-    public function set(string $key, mixed $value): void
+
+    public function set(string $key, mixed $value)
     {
         $allData = $this->getAllData();
         $allData[$key] = $value;
         $this->saveAllData($allData);
     }
 
-  
-    public function all(): array
+
+    public function all()
     {
         return $this->getAllData();
     }
 
-    private function getAllData(): array
+    private function getAllData()
     {
         if ($this->dataCache !== null) {
             return $this->dataCache;
         }
 
         if (!file_exists($this->filePath)) {
-            return $this->dataCache = []; 
+            return $this->dataCache = [];
         }
 
         $content = file_get_contents($this->filePath);
@@ -160,7 +160,7 @@ class Jsondb
         return $this->dataCache = $data ?? [];
     }
 
-    private function saveAllData(array $data): void
+    private function saveAllData(array $data)
     {
         $this->dataCache = $data;
 
