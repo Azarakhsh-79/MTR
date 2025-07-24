@@ -1594,23 +1594,23 @@ class BotHandler
                 ['text' => '❌ رد فاکتور', 'callback_data' => 'admin_reject_' . $invoiceId]
             ];
         }
-        $keyboard[] = [['text' => '⬅️ بازگشت به لیست', 'callback_data' => "admin_list_invoices_{$fromStatus}_page_{$fromPage}"]];
-
+        
         $this->deleteMessage($messageId);
 
-        if (!empty($invoice['receipt_file_id'])) {
-            $this->sendRequest("sendPhoto", [
-                'chat_id' => $this->chatId,
-                'photo' => $invoice['receipt_file_id']
-            ]);
-        }
-
-        $this->sendRequest("sendMessage", [
+        $requestData = [
             'chat_id' => $this->chatId,
-            'text' => $text,
             'parse_mode' => 'Markdown',
             'reply_markup' => json_encode(['inline_keyboard' => $keyboard])
-        ]);
+        ];
+
+        if (!empty($invoice['receipt_file_id'])) {
+            $requestData['photo'] = $invoice['receipt_file_id'];
+            $requestData['caption'] = $text;
+            $this->sendRequest("sendPhoto", $requestData);
+        } else {
+            $requestData['text'] = $text;
+            $this->sendRequest("sendMessage", $requestData);
+        }
     }
     public function showCategoryList($messageId = null): void
     {
