@@ -335,7 +335,7 @@ class BotHandler
                     $this->sendRequest("sendMessage", [
                         'chat_id' => $userId,
                         'text' => "✅ سفارش شما با شماره فاکتور `{$invoiceId}` تایید شد و به زودی برای شما ارسال خواهد شد. سپاس از خرید شما!",
-                        'parse_mode' => 'Markdown'
+                        'parse_mode' => 'HTML'
                     ]);
                 }
 
@@ -344,7 +344,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => $originalText . "\n\n--- ✅ این فاکتور توسط شما تایید شد. ---",
-                    'parse_mode' => 'Markdown'
+                    'parse_mode' => 'HTML'
                 ]);
 
                 return;
@@ -361,7 +361,7 @@ class BotHandler
                     $this->sendRequest("sendMessage", [
                         'chat_id' => $userId,
                         'text' => "❌ متاسفانه پرداخت شما برای فاکتور `{$invoiceId}` رد شد. لطفاً برای پیگیری با پشتیبانی ({$supportId}) تماس بگیرید.",
-                        'parse_mode' => 'Markdown'
+                        'parse_mode' => 'HTML'
                     ]);
                 }
 
@@ -370,7 +370,7 @@ class BotHandler
                     'chat_id' => $this->chatId,
                     'message_id' => $messageId,
                     'text' => $originalText . "\n\n--- ❌ این فاکتور توسط شما رد شد. ---",
-                    'parse_mode' => 'Markdown'
+                    'parse_mode' => 'HTML'
                 ]);
 
                 return;
@@ -1135,7 +1135,7 @@ class BotHandler
             $res = $this->sendRequest("sendMessage", [
                 "chat_id" => $this->chatId,
                 "text" => $invoiceText,
-                "parse_mode" => "Markdown",
+                "parse_mode" => "HTML",
                 "reply_markup" => $keyboard
             ]);
             if (isset($res['result']['message_id'])) {
@@ -1209,7 +1209,7 @@ class BotHandler
             'chat_id' => $this->chatId,
             "message_id" => $messageId,
             'text' => $text,
-            'parse_mode' => 'Markdown',
+            'parse_mode' => 'HTML',
             'reply_markup' => ['inline_keyboard' => [$keyboard]]
         ]);
     }
@@ -1240,7 +1240,7 @@ class BotHandler
             "chat_id" => $this->chatId,
             "message_id" => $messageId,
             "text" => $invoiceText,
-            "parse_mode" => "Markdown",
+            "parse_mode" => "HTML",
             "reply_markup" => $keyboard
         ]);
     }
@@ -2746,7 +2746,7 @@ class BotHandler
         $data = [
             'chat_id' => $this->chatId,
             'text' => $text,
-            'parse_mode' => 'Markdown',
+            'parse_mode' => 'HTML',
             'reply_markup' => json_encode($keyboard)
         ];
 
@@ -3003,7 +3003,7 @@ class BotHandler
         $this->sendRequest("sendMessage", [
             'chat_id' => $adminId,
             'text' => $text,
-            'parse_mode' => 'Markdown',
+            'parse_mode' => 'HTML',
             'reply_markup' => json_encode($keyboard)
         ]);
     }
