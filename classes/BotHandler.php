@@ -951,9 +951,9 @@ class BotHandler
         //                              ↓↓↓↓↓ پارامتر پنجم برای انگلیسی کردن اعداد
         $hour = (int) jdf::jdate('H', '', '', '', 'en');
         $defaultWelcome = match (true) {
-            $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟" . $hour,
-            $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉" . $hour,
-            default => "🌙 شب بخیر! شاید وقتشه یه هدیه‌ خاص برای خودت یا عزیزات پیدا کنی..." . $hour,
+            $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟",
+            $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉",
+            default => "🌙 شب بخیر! شاید وقتشه یه هدیه‌ خاص برای خودت یا عزیزات پیدا کنی...",
         };
 
         if (!empty($settings['main_menu_text'])) {
@@ -2010,9 +2010,81 @@ class BotHandler
             'is_active' => true,
         ];
 
-        DB::table('products')->insert($finalProduct);
+
+        $result = DB::table('products')->insert($finalProduct);
+
+        if ($result) {
+            $this->notifyChannelOfNewProduct($finalProduct);
+        }
     }
 
+    private function generateChannelPostText(array $product, string $categoryName): string
+    {
+        $name  = htmlspecialchars($product['name']);
+        $desc  = htmlspecialchars($product['description'] ?? 'توضیحی ثبت نشده');
+        $price = number_format($product['price']);
+
+        $productNameHashtag = '#' . str_replace(' ', '_', $product['name']);
+        $categoryNameHashtag = '#' . str_replace(' ', '_', $categoryName);
+        $hashtags = "\n\n" . '#محصول_جدید ' . $productNameHashtag . ' ' . $categoryNameHashtag;
+
+        $text = "🛍 <b>{$name}</b>\n\n";
+        $text .= "{$desc}\n\n";
+        $text .= "💵 <b>قیمت:</b> {$price} تومان";
+        $text .= $hashtags;
+
+        return $text;
+    }
+
+
+
+    private function notifyChannelOfNewProduct(array $product): void
+    {
+        try {
+            $settings = DB::table('settings')->all();
+            $channelId = $settings['channel_id'] ?? null;
+
+            if (empty($channelId)) {
+                Logger::log('info', 'notifyChannelOfNewProduct skipped', 'آیدی کانال در تنظیمات تعریف نشده است.');
+                return;
+            }
+
+            $category = DB::table('categories')->findById($product['category_id']);
+            $categoryName = $category['name'] ?? 'بدون_دسته';
+
+            $postText = $this->generateChannelPostText($product, $categoryName);
+
+            $productUrl = $this->botLink . '?start=product_' . $product['id'];
+
+            $keyboard = [
+                'inline_keyboard' => [
+                    [['text' => '🛍 مشاهده و خرید فوری از ربات', 'url' => $productUrl]]
+                ]
+            ];
+
+            $data = [
+                'chat_id' => $channelId,
+                'parse_mode' => 'HTML',
+                'reply_markup' => json_encode($keyboard)
+            ];
+
+            if (!empty($product['image_file_id'])) {
+                $data['photo'] = $product['image_file_id'];
+                $data['caption'] = $postText;
+                $res =  $this->sendRequest("sendPhoto", $data);
+            } else {
+                $data['text'] = $postText;
+                $res =  $this->sendRequest("sendMessage", $data);
+            }
+            if (isset($res['result']['message_id'])) {
+                $channelMessageId = $res['result']['message_id'];
+                DB::table('products')->update($product['id'], ['channel_message_id' => $channelMessageId]);
+            }
+        } catch (\Throwable $th) {
+
+            Logger::log('error', 'BotHandler::notifyChannelOfNewProduct', 'message: ' . $th->getMessage(), ['product_id' => $product['id']]);
+        }
+    }
     public function showUserProductList($categoryId, $page = 1, $messageId = null): void
     {
         $user = DB::table('users')->findById($this->chatId);
