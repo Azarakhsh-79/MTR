@@ -8,6 +8,7 @@ use Bot\DB;     // <-- استفاده از مدیر دیتابیس جدید
 use Bot\Logger; // <-- اطمینان از وجود کلاس لاگر
 use Bot\jdf;
 
+date_default_timezone_set('Asia/Tehran');
 
 class BotHandler
 {
@@ -97,7 +98,7 @@ class BotHandler
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 $this->showFavoritesList();
                 return;
-            }  elseif (str_starts_with($state, 'awaiting_receipt_')) {
+            } elseif (str_starts_with($state, 'awaiting_receipt_')) {
                 $this->deleteMessage($this->messageId);
                 if (!isset($this->message['photo'])) {
                     $this->Alert("خطا: لطفاً فقط تصویر رسید را ارسال کنید.");
@@ -109,18 +110,18 @@ class BotHandler
 
                 DB::table('invoices')->update($invoiceId, [
                     'receipt_file_id' => $receiptFileId,
-                    'status' => 'payment_review' 
+                    'status' => 'payment_review'
                 ]);
 
                 DB::table('users')->update($this->chatId, ['state' => '']);
 
                 $this->Alert("✅ رسید شما با موفقیت دریافت شد. پس از بررسی، نتیجه به شما اطلاع داده خواهد شد. سپاس از خرید شما!");
-                $this->MainMenu(); 
+                $this->MainMenu();
 
                 $this->notifyAdminOfNewReceipt($invoiceId, $receiptFileId);
 
                 return;
-            }elseif (strpos($state, 'editing_product_') === 0) {
+            } elseif (strpos($state, 'editing_product_') === 0) {
                 $this->handleProductUpdate($state);
                 return;
             } elseif (in_array($state, ['adding_product_name', 'adding_product_description', 'adding_product_count', 'adding_product_price', 'adding_product_photo'])) {
@@ -289,10 +290,10 @@ class BotHandler
                 return;
             } elseif (str_starts_with($callbackData, 'admin_approve_')) {
                 $invoiceId = str_replace('admin_approve_', '', $callbackData);
-                
-                
+
+
                 $invoice = DB::table('invoices')->findById($invoiceId);
-                
+
                 if (!$invoice || $invoice['status'] === 'approved') {
                     $this->Alert("این فاکتور قبلاً تایید شده یا یافت نشد.");
                     return;
@@ -306,12 +307,12 @@ class BotHandler
                     $productData = $productsTable->findById($productId);
                     if ($productData) {
                         $newCount = $productData['count'] - $quantityPurchased;
-                        $newCount = max(0, $newCount); 
+                        $newCount = max(0, $newCount);
                         $productsTable->update($productId, ['count' => $newCount]);
                     }
                 }
                 DB::table('invoices')->update($invoiceId, ['status' => 'approved']);
-                
+
                 $invoice = DB::table('invoices')->findById($invoiceId);
                 $userId = $invoice['user_id'] ?? null;
                 if ($userId) {
@@ -331,11 +332,10 @@ class BotHandler
                 ]);
 
                 return;
-
             } elseif (str_starts_with($callbackData, 'admin_reject_')) {
                 $invoiceId = str_replace('admin_reject_', '', $callbackData);
                 DB::table('invoices')->update($invoiceId, ['status' => 'rejected']);
-                
+
                 $invoice = DB::table('invoices')->findById($invoiceId);
                 $userId = $invoice['user_id'] ?? null;
                 $settings = DB::table('settings')->all();
@@ -348,7 +348,7 @@ class BotHandler
                         'parse_mode' => 'Markdown'
                     ]);
                 }
-                
+
                 $originalText = $callbackQuery['message']['text'];
                 $this->sendRequest("editMessageText", [
                     'chat_id' => $this->chatId,
@@ -358,7 +358,7 @@ class BotHandler
                 ]);
 
                 return;
-            }elseif ($callbackData === 'show_favorites') {
+            } elseif ($callbackData === 'show_favorites') {
                 $this->showFavoritesList(1, $messageId);
                 return;
             } elseif (str_starts_with($callbackData, 'fav_list_page_')) {
@@ -394,7 +394,7 @@ class BotHandler
                 DB::table('users')->update($this->chatId, ['state' => 'awaiting_receipt_' . $invoiceId]);
                 $this->Alert("لطفاً تصویر رسید خود را ارسال کنید...", true);
                 return;
-            }elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
+            } elseif (strpos($callbackData, 'admin_edit_product_') === 0) {
                 sscanf($callbackData, "admin_edit_product_%d_cat_%d_page_%d", $productId, $categoryId, $page);
                 if ($productId && $categoryId && $page) {
                     $this->showProductEditMenu($productId, $messageId, $categoryId, $page);
@@ -947,13 +947,19 @@ class BotHandler
     {
         $settings = DB::table('settings')->all();
         $channelId = $settings['channel_id'] ?? null;
+       
         $hour = (int) jdf::jdate('H');
         $defaultWelcome = match (true) {
             $hour < 12 => "☀️ صبح بخیر! آماده‌ای برای دیدن پیشنهادهای خاص امروز؟",
             $hour < 18 => "🌼 عصر بخیر! یه چیزی خاص برای امروز داریم 😉",
             default => "🌙 شب بخیر! شاید وقتشه یه هدیه‌ خاص برای خودت یا عزیزات پیدا کنی...",
         };
-        $menuText = $settings['main_menu_text'] ?? $defaultWelcome;
+       
+        if($settings['main_menu_text']){
+            $menuText = $settings['main_menu_text'] . "\n\n" . "<blockquote> {$defaultWelcome} </blockquote>";
+        }else{
+            $menuText =  $defaultWelcome;
+        }
 
         $allCategories = DB::table('categories')->all();
         $categoryButtons = [];
@@ -983,19 +989,21 @@ class BotHandler
             }
         }
 
-        $userActionButtons = [
-            ['text' => '❤️ علاقه‌مندی‌ها', 'callback_data' => 'show_favorites'],
-            ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
+        $categoryButtons = [
+            [
+                ['text' => '❤️ علاقه‌مندی‌ها', 'callback_data' => 'show_favorites'],
+                ['text' => '🛒 سبد خرید', 'callback_data' => 'show_cart']
+            ],
+            [
+                ['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules'],
+                ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search']
+            ],
+            [
+                ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us'],
+                ['text' => '📞 پشتیبانی', 'callback_data' => 'contact_support']
+            ]
         ];
-        $categoryButtons[] = $userActionButtons;
-        $categoryButtons[] = [
-            ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search'],
-            ['text' => '📞 پشتیبانی', 'callback_data' => 'contact_support']
-        ];
-        $categoryButtons[] = [
-            ['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules'],
-            ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us']
-        ];
+
 
         if (!empty($channelId)) {
             $channelUsername = str_replace('@', '', $channelId);
@@ -2689,7 +2697,7 @@ class BotHandler
         }
         $text .= "\n";
         $text .= "💰 مبلغ کل پرداخت شده: {$totalAmount} تومان\n\n";
-       
+
 
         $keyboard = [
             'inline_keyboard' => [
@@ -2711,6 +2719,5 @@ class BotHandler
             'parse_mode' => 'Markdown',
             'reply_markup' => json_encode($keyboard)
         ]);
-        
     }
 }
