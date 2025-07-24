@@ -229,6 +229,20 @@ class BotHandler
                 }
                 $this->MainMenu($messageId);
                 return;
+            } elseif ($callbackData === 'my_orders') { 
+                $this->showMyOrdersList(1, $messageId);
+                return;
+            } elseif (str_starts_with($callbackData, 'my_orders_page_')) {
+                $page = (int)str_replace('my_orders_page_', '', $callbackData);
+                $this->showMyOrdersList($page, $messageId);
+                return;
+            } elseif (str_starts_with($callbackData, 'show_order_details_')) {
+                $invoiceId = str_replace('show_order_details_', '', $callbackData);
+                $this->showSingleOrderDetails($invoiceId, $messageId);
+                return;
+            } elseif ($callbackData === 'contact_support') { 
+                $this->showSupportInfo($messageId);
+                return;
             } elseif ($callbackData === 'contact_support') {
                 $this->showSupportInfo($messageId);
                 return;
@@ -1001,7 +1015,11 @@ class BotHandler
             ],
             [
                 ['text' => '📜 قوانین فروشگاه', 'callback_data' => 'show_store_rules'],
+                ['text' => '🛍️ سفارشات من', 'callback_data' => 'my_orders'],
+            ],
+            [
                 ['text' => '🔍 جستجوی محصول', 'callback_data' => 'activate_inline_search']
+
             ],
             [
                 ['text' => 'ℹ️ درباره ما', 'callback_data' => 'show_about_us'],
@@ -1038,6 +1056,157 @@ class BotHandler
         } else {
             $this->sendRequest("sendMessage", $data);
         }
+    }
+
+
+    private function translateInvoiceStatus(string $status): string
+    {
+        return match ($status) {
+            'pending_payment' => '⏳ در انتظار پرداخت',
+            'payment_review' => '🔎 در حال بررسی پرداخت',
+            'approved' => '✅ تایید شده (آماده‌سازی برای ارسال)',
+            'rejected' => '❌ رد شده',
+            default => 'نامشخص',
+        };
+    }
+
+
+    private function generateInvoiceCardText(array $invoice): string
+    {
+        $invoiceId = $invoice['id'];
+        $date = jdf::jdate('Y/m/d H:i', strtotime($invoice['created_at']));
+        $totalAmount = number_format($invoice['total_amount']);
+        $status = $this->translateInvoiceStatus($invoice['status']);
+
+        $text = "📄 سفارش شماره: `{$invoiceId}`\n";
+        $text .= "📅 **تاریخ ثبت: {$date}\n";
+        $text .= "💰 مبلغ کل: {$totalAmount} تومان\n";
+        $text .= "📊 وضعیت: {$status}";
+
+        return $text;
+    }
+
+
+    public function showMyOrdersList($page = 1, $messageId = null): void
+    {
+        $allInvoices = DB::table('invoices')->find(['user_id' => $this->chatId]);
+
+        if (empty($allInvoices)) {
+            $this->Alert("شما تاکنون هیچ سفارشی ثبت نکرده‌اید.");
+            return;
+        }
+
+        usort($allInvoices, fn($a, $b) => strtotime($b['created_at']) <=> strtotime($a['created_at']));
+
+        $perPage = 5;
+        $totalPages = ceil(count($allInvoices) / $perPage);
+        $offset = ($page - 1) * $perPage;
+        $invoicesOnPage = array_slice($allInvoices, $offset, $perPage);
+
+        $text = "لیست سفارشات شما (صفحه {$page} از {$totalPages}):";
+        if ($messageId) {
+            $this->sendRequest("editMessageText", ['chat_id' => $this->chatId, 'message_id' => $messageId, 'text' => $text, 'reply_markup' => ['inline_keyboard' => []]]);
+        } else {
+            $user = DB::table('users')->findById($this->chatId);
+            if (!empty($user['message_ids'])) $this->deleteMessages($user['message_ids']);
+        }
+
+        $newMessageIds = [];
+
+        foreach ($invoicesOnPage as $invoice) {
+            $invoiceText = $this->generateInvoiceCardText($invoice);
+            $keyboard = [
+                'inline_keyboard' => [
+                    [['text' => '🔍 نمایش جزئیات کامل', 'callback_data' => 'show_order_details_' . $invoice['id']]]
+                ]
+            ];
+
+            if ($invoice['status'] === 'pending_payment') {
+                $keyboard['inline_keyboard'][] = [['text' => '📸 ارسال رسید پرداخت', 'callback_data' => 'upload_receipt_' . $invoice['id']]];
+            }
+
+            $res = $this->sendRequest("sendMessage", [
+                "chat_id" => $this->chatId,
+                "text" => $invoiceText,
+                "parse_mode" => "Markdown",
+                "reply_markup" => $keyboard
+            ]);
+            if (isset($res['result']['message_id'])) {
+                $newMessageIds[] = $res['result']['message_id'];
+            }
+        }
+
+        $navButtons = [];
+        if ($page > 1) {
+            $navButtons[] = ['text' => "▶️ صفحه قبل", 'callback_data' => "my_orders_page_" . ($page - 1)];
+        }
+        if ($page < $totalPages) {
+            $navButtons[] = ['text' => "صفحه بعد ◀️", 'callback_data' => "my_orders_page_" . ($page + 1)];
+        }
+
+        $navKeyboard = [];
+        if (!empty($navButtons)) {
+            $navKeyboard[] = $navButtons;
+        }
+        $navKeyboard[] = [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']];
+
+        $navMessageRes = $this->sendRequest("sendMessage", [
+            'chat_id' => $this->chatId,
+            'text' => "--- صفحه {$page} از {$totalPages} ---",
+            'reply_markup' => ['inline_keyboard' => $navKeyboard]
+        ]);
+        if (isset($navMessageRes['result']['message_id'])) {
+            $newMessageIds[] = $navMessageRes['result']['message_id'];
+        }
+
+        DB::table('users')->update($this->chatId, ['message_ids' => $newMessageIds]);
+    }
+
+
+    public function showSingleOrderDetails(string $invoiceId, int $messageId): void
+    {
+        $invoice = DB::table('invoices')->findById($invoiceId);
+        if (!$invoice || $invoice['user_id'] != $this->chatId) {
+            $this->Alert("خطا: این سفارش یافت نشد یا متعلق به شما نیست.");
+            return;
+        }
+
+        $settings = DB::table('settings')->all();
+        $storeName = $settings['store_name'] ?? 'فروشگاه ما';
+        $date = jdf::jdate('Y/m/d H:i', strtotime($invoice['created_at']));
+        $status = $this->translateInvoiceStatus($invoice['status']);
+
+        $text = "🧾 جزئیات کامل سفارش از {$storeName}**\n\n";
+        $text .= "🆔 شماره فاکتور: `{$invoiceId}`\n";
+        $text .= "📆 تاریخ ثبت: {$date}\n";
+        $text .= "📊 وضعیت فعلی: {$status}\n\n";
+
+        $text .= "🚚 مشخصات گیرنده:\n";
+        $text .= "👤 نام: {$invoice['user_info']['name']}\n";
+        $text .= "📞 تلفن: {$invoice['user_info']['phone']}\n";
+        $text .= "📍 آدرس: {$invoice['user_info']['address']}\n\n";
+
+        $text .= "📋 لیست اقلام خریداری شده:\n";
+        $totalPrice = 0;
+        foreach ($invoice['products'] as $product) {
+            $unitPrice = $product['price'];
+            $itemPrice = $unitPrice * $product['quantity'];
+            $totalPrice += $itemPrice;
+
+            $text .= "🔸 {$product['name']}\n";
+            $text .= "  ➤ تعداد: {$product['quantity']} | قیمت واحد: " . number_format($unitPrice) . " تومان\n";
+        }
+        $text .= "\n💰 مبلغ نهایی پرداخت شده:" . number_format($invoice['total_amount']) . " تومان";
+
+        $keyboard = [['text' => '⬅️ بازگشت به لیست سفارشات', 'callback_data' => 'my_orders']];
+
+        $this->sendRequest("editMessageText", [
+            'chat_id' => $this->chatId,
+            "message_id" => $messageId,
+            'text' => $text,
+            'parse_mode' => 'Markdown',
+            'reply_markup' => ['inline_keyboard' => [$keyboard]]
+        ]);
     }
     public function showFavoritesList($page = 1, $messageId = null): void
     {
@@ -1133,18 +1302,14 @@ class BotHandler
 
     public function showCart($messageId = null): void
     {
-
-
         $user = DB::table('users')->findById($this->chatId);
         $cart = json_decode($user['cart'] ?? '{}', true);
+
         if (!empty($user['message_ids'])) {
             $this->deleteMessages($user['message_ids']);
         }
-
-
         if (empty($cart)) {
             $this->Alert("🛒 سبد خرید شما خالی است.");
-            $this->MainMenu();
             return;
         }
 
@@ -2054,7 +2219,7 @@ class BotHandler
 
             $postText = $this->generateChannelPostText($product, $categoryName);
 
-            $productUrl = $this->botLink . '?start=product_' . $product['id'];
+            $productUrl = $this->botLink . $product['id'];
 
             $keyboard = [
                 'inline_keyboard' => [
@@ -2719,12 +2884,20 @@ class BotHandler
         // ۴. پاک کردن سبد خرید کاربر
         DB::table('users')->update($this->chatId, ['cart' => '[]']);
 
-        // ۵. نمایش اطلاعات کارت و دکمه ارسال رسید
-        $text = "✅ سفارش شما ثبت شد!\n\n";
-        $text .= "لطفاً مبلغ <b>" . number_format($grandTotal) . " تومان</b> را به کارت زیر واریز کرده و سپس با استفاده از دکمه زیر، تصویر رسید پرداخت را برای ما ارسال کنید.\n\n";
-        $text .= "💳 شماره کارت:\n<code>{$cardNumber}</code>\n\n";
-        $text .= "👤 نام صاحب حساب:\n<b>{$cardHolderName}</b>\n\n";
-        $text .= "❗️ سفارش شما پس از تایید پرداخت، پردازش و ارسال خواهد شد.";
+        $text = "🧾 <b>رسید ثبت سفارش</b>\n";
+        $text .= "━━━━━━━━━━━━━━━━━\n";
+        $text .= "🛒 وضعیت سفارش: <b>ثبت شده</b>\n";
+        $text .= "💰 مبلغ قابل پرداخت: <b>" . number_format($grandTotal) . " تومان</b>\n";
+        $text .= "🕒 زمان ثبت: " . jdf::jdate("Y/m/d - H:i") . "\n";
+        $text .= "━━━━━━━━━━━━━━━━━\n\n";
+
+        $text .= "📌 لطفاً مبلغ فوق را به کارت زیر واریز نمایید و سپس از طریق دکمه‌ی زیر، تصویر رسید پرداخت را برای ما ارسال کنید:\n\n";
+
+        $text .= "💳 <b>شماره کارت:</b>\n<code>{$cardNumber}</code>\n";
+        $text .= "👤 <b>نام صاحب حساب:</b>\n<b>{$cardHolderName}</b>\n\n";
+
+        $text .= "📦 سفارش شما پس از تأیید پرداخت پردازش و ارسال خواهد شد.\n\n";
+        $text .= "در صورت نیاز به راهنمایی، پشتیبانی در دسترس شماست. 🙋‍♂️";
 
         $keyboard = [
             'inline_keyboard' => [
