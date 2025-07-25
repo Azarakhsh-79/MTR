@@ -98,6 +98,9 @@ class BotHandler
                     $this->MainMenu();
                 }
                 return;
+            } elseif ($this->text === "/mini_app") {
+                $this->mini_app();
+                return;
             } elseif ($this->text === "/cart") {
                 if (!empty($currentUser['message_ids'])) $this->deleteMessages($currentUser['message_ids']);
                 $this->showCart();
@@ -3332,5 +3335,33 @@ class BotHandler
             'parse_mode' => 'HTML',
             'reply_markup' => json_encode($keyboard)
         ]);
+    }
+
+    public function mini_app($messageId = null): void
+    {
+        $webAppUrl = "https://www.rammehraz.com/Rambot/test/Amir/MTR/mini_app/test.html";
+
+        $text = "برای باز کردن مینی اپ ساده، روی دکمه زیر کلیک کنید:";
+        $keyboard = [
+            'inline_keyboard' => [
+                [['text' => '🚀 باز کردن مینی اپ', 'web_app' => ['url' => $webAppUrl]]],
+                [['text' => '⬅️ بازگشت به منوی اصلی', 'callback_data' => 'main_menu']]
+            ]
+        ];
+
+        if ($messageId) {
+            $this->sendRequest("editMessageText", [
+                'chat_id' => $this->chatId,
+                "message_id" => $messageId,
+                'text' => $text,
+                'reply_markup' => json_encode($keyboard)
+            ]);
+        } else {
+            $this->sendRequest("sendMessage", [
+                'chat_id' => $this->chatId,
+                'text' => $text,
+                'reply_markup' => json_encode($keyboard)
+            ]);
+        }
     }
 }
