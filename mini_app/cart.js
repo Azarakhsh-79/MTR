@@ -43,9 +43,10 @@ window.addEventListener('load', function() {
         });
 
         document.getElementById('subtotal').innerText = subtotal.toLocaleString() + ' تومان';
-        document.getElementById('grand-total').innerText = (subtotal + cartData.deliveryCost).toLocaleString() + ' تومان';
+        const grandTotal = subtotal + (cartData.deliveryCost || 0);
+        document.getElementById('grand-total').innerText = grandTotal.toLocaleString() + ' تومان';
         
-        tg.MainButton.setText(`پرداخت نهایی (${(subtotal + cartData.deliveryCost).toLocaleString()} تومان)`);
+        tg.MainButton.setText(`پرداخت نهایی (${grandTotal.toLocaleString()} تومان)`);
     }
 
     // --- تابع برای تغییر تعداد محصول ---
@@ -71,13 +72,27 @@ window.addEventListener('load', function() {
     // --- دریافت اطلاعات واقعی از سرور ---
     function fetchCartData() {
         // آدرس کامل فایل api.php شما
-        const apiUrl = 'https://www.rammehraz.com/Rambot/test/Amir/MTR/api.php?action=get_cart';
+        const apiUrl = 'https://www.rammehraz.com/Rambot/test/Amir/MTR/mini_app/api.php?action=get_cart';
         
-        // ارسال initData برای احراز هویت
-        const urlWithAuth = `${apiUrl}&initData=${tg.initData}`;
+        // **اصلاح کلیدی در اینجا**
+        // مطمئن می‌شویم که initData وجود دارد و آن را به درستی برای URL انکود می‌کنیم
+        if (!tg.initData) {
+            tg.showAlert('خطا: اطلاعات اولیه تلگرام در دسترس نیست. لطفاً مینی اپ را دوباره باز کنید.');
+            console.error('Telegram initData is missing.');
+            loader.innerText = 'خطا در احراز هویت.';
+            return;
+        }
+
+        const urlWithAuth = `${apiUrl}&initData=${encodeURIComponent(tg.initData)}`;
 
         fetch(urlWithAuth)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    // دریافت خطای متنی از سرور در صورت وجود
+                    return response.json().then(err => { throw new Error(err.error || `HTTP error! status: ${response.status}`) });
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
                     tg.showAlert('خطا در بارگذاری اطلاعات: ' + data.error);
@@ -87,8 +102,9 @@ window.addEventListener('load', function() {
                 }
             })
             .catch(error => {
-                tg.showAlert('یک خطای شبکه رخ داد. لطفاً دوباره تلاش کنید.');
+                tg.showAlert('یک خطای شبکه رخ داد: ' + error.message);
                 console.error('Fetch Error:', error);
+                 loader.innerText = 'خطا در ارتباط با سرور.';
             })
             .finally(() => {
                 loader.classList.add('hidden');

@@ -1,5 +1,18 @@
 <?php
+// =================== START: CORS & PREFLIGHT HANDLING ===================
+// به درخواست‌هایی که از هر دامنه‌ای می‌آیند اجازه می‌دهد
+header("Access-Control-Allow-Origin: *");
+// متدهای مجاز برای درخواست را مشخص می‌کند
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+// هدرهای مجاز در درخواست را مشخص می‌کند
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
+// مرورگرها قبل از ارسال درخواست اصلی، یک درخواست از نوع OPTIONS برای بررسی CORS می‌فرستند.
+// این کد به آن درخواست پاسخ مثبت می‌دهد تا درخواست اصلی ارسال شود.
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 // فعال کردن نمایش همه خطاها و لاگ کردن آن‌ها
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -14,9 +27,9 @@ header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
 // لود کردن کلاس‌های مورد نیاز
-require_once __DIR__ . '/vendor/autoload.php';
-require_once __DIR__ . '/classes/DB.php';
-require_once __DIR__ . '/classes/jdf.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../classes/DB.php';
+require_once __DIR__ . '/../classes/jdf.php';
 
 use Bot\DB;
 use Config\AppConfig;
