@@ -3339,8 +3339,7 @@ class BotHandler
 
     public function mini_app($messageId = null): void
     {
-        $webAppUrl = "https://www.rammehraz.com/Rambot/test/Amir/MTR/mini_app/test.html";
-
+        $webAppUrl = "https://bot.rammehraz.com/MTR/mini_app/test.html";
         $text = "برای باز کردن مینی اپ ساده، روی دکمه زیر کلیک کنید:";
         $keyboard = [
             'inline_keyboard' => [
